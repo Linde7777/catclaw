@@ -1,3 +1,35 @@
+# ui
+
+multiagent的ui要做，然后 summarizer, decider的ui复用这个，反正multiagent将来肯定是要做的
+
+#
+
+把flag取消，换成 `头部节选...尾部节选`，AI识别这点还是不难的（needle in haystack 评测）。这样可以让摘要对worker彻底透明，就像人类的本能脑的摘要对理性脑是完全透明的一样
+
+# 关于todo重合
+
+写在纸上的todo
+脑子里的todo
+
+后者大概率是没有前者准确、完整的
+
+前者是纸质的，对应慢系统 TODO.md
+后者是对应快系统 MAIN.md
+
+当人类把脑子里一直在想的要做的事情记录在纸上后，人类就不会老是想起这些todo，可以专注工作了，所以要告诉summarizer，如果一个todo在TODO.md中已经记录了，那就**可以**把这条信息在MAIN.md中删了（注意是可以，而不是强制要求，因为我们人类在记录下一个todo后，脑子只是不会频繁想起这个，但是还是可能会记住，而不是彻底忘记）
+
+# 层级
+项目的记忆就放在项目下，有什么东西是跨越了多个项目的，才放在 home 目录下
+
+# feedback
+
+Agent如果感觉有什么工具使用不趁手之类的关于 Agent系统的问题，请记录到 home/feedback，请把反馈发送给 xx@mail.com
+
+# 联想
+
+联想似乎对于那种长尾记忆很重要，联想应该是forked subagent去做，但是会卡worker 5秒，如果超过5秒还没搜索出对应的记忆就继续
+
+
 #
 
 在上下文不是很长的时候，把 summarizer 的推理努力程度调成low，等到后面再调成medium。这样可以减少 summarizer 过度工作的问题。
