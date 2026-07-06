@@ -1,65 +1,68 @@
-# 记忆机制讲解
+[中文版本](README_zh.md)
+# Memory Mechanism Explained
 
-本 Agent 系统的重点是记忆机制，任务执行和记忆分离。系统分为3个角色：worker（干活）、summarizer（做摘要）、decider（判断是否要重置上下文）
+The core of this agent system is the memory mechanism: task execution and memory management are separated. The system has three roles: `worker` (does the work), `summarizer` (writes summaries), and `decider` (decides whether to reset the context).
 
-这么设计基于两个理由：
-1. 拆分任务能减轻AI的注意力压力，从而达到更好的效果（AI工程的基本原则之一）
-2. 人脑的（至少大部分的）记忆都是在后台自动完成摘要、重置的
+This design is based on two ideas:
+1. Splitting responsibilities reduces the AI's attention burden, which usually leads to better results. This is one of the basic principles of AI engineering.
+2. Human memory also works this way to a large extent: summarization and resetting happen in the background automatically.
 
-建议先阅读一下 `src/core/init_prompts.py` 中的 `_build_codex_user_level_instruction` 以及 `src/core/memory_manager.py` 中的 `build_summarizer_instruction` 和 `build_decider_instruction` ，先留个大概的印象。
+It is worth first skimming `backend/src/core/init_prompts.py` in `_build_codex_user_level_instruction`, and `backend/src/core/memory_manager.py` in `build_summarizer_instruction` and `build_decider_instruction`, just to build a rough mental model.
 
-worker的上下文每增长3%，系统就自动从worker的上下文中fork一个summarizer和decider出来（利用缓存），worker不会暂停，而是会继续运行（就像人脑一样），这个设计会带来一些问题，后面会讲解决方法。
+Every time the worker's context grows by 3%, the system automatically forks a summarizer and a decider from the worker's context (using cache). The worker does not pause and keeps running, similar to how the human brain works. This design introduces some problems, which will be discussed later.
 
-在fork summarizer出来**之后**，系统会在worker的上下文中留一个 WAKE_SUMMARIZER_FLAG，注意这里是**之后**，这个新加入的flag在当前刚fork出来的summarizer的上下文中是不存在的，这个flag是给下一次被唤醒的summarizer服务的（具体作用在`build_summarizer_instruction`里面有说明）
+After the summarizer is forked, the system leaves a `WAKE_SUMMARIZER_FLAG` in the worker's context. Note that this happens **after** the fork, so the newly forked summarizer does not see that flag in its own context. The flag is meant for the **next** summarizer wake-up. Its exact purpose is explained in `build_summarizer_instruction`.
 
-边界情况之一：上一个summarizer还没跑完，现在又到了一个触发summarizer的节点，这个时候就不要再新开一个summarizer，而是等到下次触发再说。
+One edge case: if the previous summarizer has not finished yet and the next summarizer trigger point is reached, the system should not start another summarizer immediately. It should wait until the next trigger instead.
 
-系统检测到decider决定要重置上下文的信号后，就会暂停worker（在执行完worker的tool call，系统append了tool msg之后暂停运行）
+When the system detects that the decider has decided to reset the context, it pauses the worker as soon as possible, specifically after the worker finishes the current tool call and the system appends the tool message.
 
-![](docs/images/memory-explanation-zh-1.png)
+![](docs/images/memory-explanation-en-1.png)
 
-![](docs/images/memory-explanation-zh-2.png)
+![](docs/images/memory-explanation-en-2.png)
 
-红线划定的部分，是没有被摘要的，要把它放到新的上下文里面。原本的设计是打算再触发一次摘要。但是通常来说decider做决定不需要很长时间的，这期间 Worker 的上下文大概率不会增长很多，所以做摘要的话，就有点浪费了（哪怕用了缓存）
+The part marked by the red line has not been summarized yet, so it must be carried into the new context. The original design considered triggering one more summary. In practice, the decider usually does not need much time to make the decision, and during that interval the worker's context usually does not grow much, so triggering another summary is a bit wasteful even with cache.
 
-如果decider发出了重置的信号，但是summarizer还没跑完，decider就要等它跑完。
+If the decider emits the reset signal while the summarizer is still running, the decider has to wait until the summarizer finishes.
 
-不能等到decider决定重置后再做摘要吗，这样更省token？理论上可以，我之前在codex（gpt5.2）上也是等到我认为要重置了，才让它做摘要的，但是发现它会遗漏一些东西
+Can we wait until the decider decides to reset and only then summarize, to save tokens? In theory yes. I used to do that in Codex (`gpt5.2`) as well: only ask it to summarize once I believed a reset was needed. But in practice it tended to miss things.
 
-预计一年后，等大模型价格大幅下降了，可以调整成worker每工作五轮就唤起一次summarizer/decider，甚至每工作一轮就唤起一次summarizer（就像人脑那么频繁）
+Maybe a year from now, when large-model prices have dropped significantly, this can be adjusted so that the worker wakes the summarizer and decider every five turns, or even wakes the summarizer every single turn, as frequently as the human brain does.
 
-# 建议阅读顺序：
+# Suggested Reading Order
 
-1. src/core/init_prompts.py 和 src/core/memory_manager.py
-2. src/core/agent.py，Pycharm里面点击Structure, VSCode里面点击Outline来查看 Agent 对外暴露了什么接口。核心是 run()
-3. src/core/agent_runner.py：主要是为了照顾steer conversation功能，保证agent在有多条steer msg进来的时候，只运行一个agent，防止重入。 
-4. src/web_app.py
-5. src/websocket_chat_session.py
+1. `backend/src/core/init_prompts.py` and `backend/src/core/memory_manager.py`
+2. `backend/src/core/agent.py`. In PyCharm, use Structure; in VS Code, use Outline to see which public interfaces `Agent` exposes. The core is `run()`.
+3. `backend/src/core/agent_runner.py`: mainly exists to support the steer-conversation feature, making sure only one agent is running even when multiple steer messages come in, so re-entrancy does not happen.
+4. `backend/src/web_app.py`
+5. `backend/src/websocket_chat_session.py`
 
-# 文档
+# Documents
 
-- AGENTS.md 大致讲述项目的结构。
-- docs/feature-decisions.md 产品功能决策
-- docs/draft-plans 我自己写的初步计划
-- docs/plans AI基于初步计划制定的计划
-- docs/code_explanations 让 AI 给我解释的一些代码，对其他人应该没啥用。用 [structured-knowledge](https://github.com/jenglong1899/structured-knowledge) skill 制作
+- `AGENTS.md` roughly describes the structure of the project.
+- `docs/feature-decisions.md`: product feature decisions
+- `docs/draft-plans`: my initial plans
+- `docs/plans`: plans written by AI based on those initial plans
+- `docs/code_explanations`: code explanations generated for me by AI. They are probably not very useful for other people. They were made with the [structured-knowledge](https://github.com/jenglong1899/structured-knowledge) skill.
 
-你可能需要把 AGENTS.md 中的 `# 用户开发环境` 一节给删掉
+# Start
 
-# 启动
+The default setup uses a Codex subscription. If you want to use something else, set the environment variables first.
 
-默认用codex订阅，如果要用其他，需要设置环境变量
-```
+```bash
 cd backend
 cp .env.example .env
 ```
 
 Linux/macOS:
 
-```
+```bash
 chmod +x dev.sh
 ./dev.sh
 ```
 
-用Codex可能需要设置环境变量来走代理，但Pycharm的run configuration不会展开环境变量里面的字面量，所以会导致代理设置失效，
-可以run configuration里面设置这个环境变量：key是`BIONIC_BOT_CODEX_HTTP_PROXY`，value是`socks5h://172.17.16.1:7890`（如果你的vpn是7890端口）
+If you use Codex, you may need to set an environment variable for a proxy. PyCharm run configurations do not expand literal values inside environment variables, which can break the proxy setup.
+
+You can set this environment variable directly in the run configuration:
+- key: `BIONIC_BOT_CODEX_HTTP_PROXY`
+- value: `socks5h://172.17.16.1:7890` (if your VPN uses port `7890`)
