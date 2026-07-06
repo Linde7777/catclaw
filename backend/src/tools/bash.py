@@ -51,9 +51,9 @@ class BashTool:
             # $? 是上一条命令的退出码；exit 再用这个退出码结束 wrapper，保持工具语义不变。
             wrapped_command = (
                 f"{tool_input.command}\n"
-                f"__project_x_returncode=$?\n"
-                f'printf "%s\\n%s\\n" "$__project_x_returncode" "$PWD" > "{state_path}"\n'
-                f"exit $__project_x_returncode"
+                f"__bionic_bot_returncode=$?\n"
+                f'printf "%s\\n%s\\n" "$__bionic_bot_returncode" "$PWD" > "{state_path}"\n'
+                f"exit $__bionic_bot_returncode"
             )
             process = await asyncio.create_subprocess_exec(
                 "bash",

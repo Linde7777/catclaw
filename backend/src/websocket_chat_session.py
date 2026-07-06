@@ -61,12 +61,12 @@ class AgentCallbacks:
 
 def resolve_model_config() -> ModelConfig:
     # codex 才是最划算的，所以应该默认用 codex
-    model_key = os.getenv("PROJECT_X_MODEL_CONFIG", "openai-codex")
+    model_key = os.getenv("BIONIC_BOT_MODEL_CONFIG", "openai-codex")
     model_config = MODEL_CONFIGS.get(model_key)
     if model_config is None:
         supported = ", ".join(sorted(MODEL_CONFIGS))
         raise RuntimeError(
-            f"PROJECT_X_MODEL_CONFIG={model_key} 不受支持，可选值: {supported}"
+            f"BIONIC_BOT_MODEL_CONFIG={model_key} 不受支持，可选值: {supported}"
         )
     if model_key == "mock":
         return model_config
@@ -81,7 +81,7 @@ def resolve_model_config() -> ModelConfig:
             raise RuntimeError(
                 "选择 openai-codex 需要本地 Codex OAuth 凭据，但当前环境未配置。\n"
                 "- 方案 1：先用 Codex CLI 登录，确保 ~/.codex/auth.json 存在\n"
-                "- 方案 2：切回无需 OAuth 的模型（例如设置 PROJECT_X_MODEL_CONFIG=mock 进行开发调试）"
+                "- 方案 2：切回无需 OAuth 的模型（例如设置 BIONIC_BOT_MODEL_CONFIG=mock 进行开发调试）"
             ) from exc
         return model_config
     if not model_config.api_key:
@@ -93,7 +93,7 @@ def create_default_agent(*, callbacks: AgentCallbacks) -> Agent:
     cwd_state = CwdState(initial_cwd=str(load_persisted_worker_cwd()))
     model_config = resolve_model_config()
     return Agent(
-        name="project-x-web",
+        name="bionic-bot-web",
         model_config=model_config,
         init_messages=build_init_messages(provider=model_config.provider),
         # bash 和 read_file 共享 cwd，所以这里必须给每个 Agent 创建独立状态，不能复用全局单例。

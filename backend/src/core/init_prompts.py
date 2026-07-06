@@ -16,10 +16,10 @@ from src.commons import ORIGINALS_DIR
 from src.commons import WAKE_MM_SUMMARY_FLAG
 from src.commons import MAIN_MEMORY_FILEPATH, SUMMARIES_DIR, TODO_MEMORY_FILEPATH, MEMORY_MAIN_MD, MEMORY_TODO_MD
 
-INITIAL_MAIN_MEMORY_CONTENT_ZH = "用户刚完成 project-x 的安装，还没让我做什么事情"
+INITIAL_MAIN_MEMORY_CONTENT_ZH = "用户刚完成 bionic-bot 的安装，还没让我做什么事情"
 INITIAL_TODO_MEMORY_CONTENT_ZH = ""
 
-TAG_PROJECT_X_INSTRUCTION="project_x_instruction"
+TAG_BIONIC_BOT_INSTRUCTION="bionic_bot_instruction"
 
 def _build_codex_user_level_instruction() -> str:
     """
@@ -27,15 +27,15 @@ def _build_codex_user_level_instruction() -> str:
     :return:
     """
     return f"""
-<{TAG_PROJECT_X_INSTRUCTION}>
-你运行在一个基于 Codex 封装的，名为 project-x 的 Agent 系统中。如果你收到了被xml包裹的user-role message，你需要知道这并不是用户输入的，而是系统自动输入的。
+<{TAG_BIONIC_BOT_INSTRUCTION}>
+你运行在一个基于 Codex 封装的，名为 bionic-bot 的 Agent 系统中。如果你收到了被xml包裹的user-role message，你需要知道这并不是用户输入的，而是系统自动输入的。
 
 Codex提供的multi_tool_use.parallel在本系统中不存在，不要调用这个。
 
 {_build_memory_mechanism_instruction()}
 
 <todo_mechanism>
-codex提供的`update_plan`工具在 project-x 中并不存在
+codex提供的`update_plan`工具在 bionic-bot 中并不存在
 
 worker 只能在 {MEMORY_TODO_MD} 记录 todo
 
@@ -55,7 +55,7 @@ worker 只能在 {MEMORY_TODO_MD} 记录 todo
 <{MEMORY_TODO_MD}>
 {read_todo_memory()}
 </{MEMORY_TODO_MD}>
-</{TAG_PROJECT_X_INSTRUCTION}>
+</{TAG_BIONIC_BOT_INSTRUCTION}>
 """
 
 
@@ -75,7 +75,7 @@ def _build_system_level_instruction_zh() -> str:
     return f"""
 <system_level_instruction>
 
-- 背景：你运行在一个叫 project-x 的 Agent 系统中，用户通过网页UI与你交互。如果你收到了被xml包裹的user-role message，你需要知道这并不是用户输入的，而是系统自动输入的。
+- 背景：你运行在一个叫 bionic-bot 的 Agent 系统中，用户通过网页UI与你交互。如果你收到了被xml包裹的user-role message，你需要知道这并不是用户输入的，而是系统自动输入的。
 
 {_build_memory_mechanism_instruction()}
 
@@ -102,7 +102,7 @@ def _build_memory_mechanism_instruction()->str:
 <memory_mechanism>
 系统提供一套类人记忆机制。
 
-人类通常不会逐字记住刚读过的内容，而是保留摘要、印象和少量关键细节。project-x 也采用类似机制：系统会自动加载 `{MAIN_MEMORY_FILEPATH}` 和 `{TODO_MEMORY_FILEPATH}` 给你，作为你当前上下文之外的长期摘要记忆。
+人类通常不会逐字记住刚读过的内容，而是保留摘要、印象和少量关键细节。bionic-bot 也采用类似机制：系统会自动加载 `{MAIN_MEMORY_FILEPATH}` 和 `{TODO_MEMORY_FILEPATH}` 给你，作为你当前上下文之外的长期摘要记忆。
 
 <roles>
 系统中有两个角色： 
@@ -120,6 +120,7 @@ def _build_memory_mechanism_instruction()->str:
 **如果你收到了处理记忆的指令，你就是 memory manager。**
 
 当系统创建出 summarizer 之后，系统会在 worker 的上下文中插入 {WAKE_MM_SUMMARY_FLAG} (user-role msg) 作为辅助标记，worker和decider都不需要关注这个。
+
 
 worker可以做一些“联想”，比如怀疑自己可能接触过某些信息的时候，worker可以去 {ORIGINALS_DIR} 里面搜索相关的关键词，这个文件夹里面存放的是worker的所有完整记忆。
 

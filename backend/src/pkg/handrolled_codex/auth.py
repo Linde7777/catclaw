@@ -20,7 +20,7 @@ class CodexTokens:
 
 def _auth_root() -> Path:
     default_root = str(BASE_ROOT)
-    return Path(os.getenv("PROJECT_X_AUTH_ROOT", default_root)).expanduser()
+    return Path(os.getenv("BIONIC_BOT_AUTH_ROOT", default_root)).expanduser()
 
 
 def _auth_path() -> Path:
@@ -58,7 +58,7 @@ def _save_auth_store(payload: dict[str, Any]) -> None:
 
 
 def _read_codex_cli_tokens() -> CodexTokens | None:
-    codex_home = os.getenv("PROJECT_X_CODEX_HOME", "").strip() or os.getenv("CODEX_HOME", "").strip()
+    codex_home = os.getenv("BIONIC_BOT_CODEX_HOME", "").strip() or os.getenv("CODEX_HOME", "").strip()
     if not codex_home:
         codex_home = str(Path.home() / ".codex")
     path = (Path(codex_home).expanduser() / "auth.json")
@@ -87,7 +87,7 @@ def _read_codex_cli_tokens() -> CodexTokens | None:
 
 def resolve_codex_tokens(*, import_from_cli_if_missing: bool = True) -> CodexTokens:
     """
-    优先读 project-x 自己的 auth store；缺失时可选从 ~/.codex/auth.json 导入一次。
+    优先读 bionic-bot 自己的 auth store；缺失时可选从 ~/.codex/auth.json 导入一次。
     """
     with _auth_store_lock():
         store = _load_auth_store()
@@ -99,7 +99,7 @@ def resolve_codex_tokens(*, import_from_cli_if_missing: bool = True) -> CodexTok
             return CodexTokens(access_token=access_token, refresh_token=refresh_token)
 
         if not import_from_cli_if_missing:
-            raise ValueError("缺少 Codex OAuth tokens（project-x auth.json 未配置）。")
+            raise ValueError("缺少 Codex OAuth tokens（bionic-bot auth.json 未配置）。")
 
         cli_tokens = _read_codex_cli_tokens()
         if cli_tokens is None:

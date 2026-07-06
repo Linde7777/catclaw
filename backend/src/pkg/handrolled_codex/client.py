@@ -94,7 +94,7 @@ def resolve_codex_runtime(*, base_url_override: str | None = None) -> CodexRunti
     if base_url_override is not None:
         base_url = str(base_url_override).strip().rstrip("/")
     if not base_url:
-        base_url = os.getenv("PROJECT_X_CODEX_BASE_URL", DEFAULT_CODEX_BASE_URL).strip().rstrip("/")
+        base_url = os.getenv("BIONIC_BOT_CODEX_BASE_URL", DEFAULT_CODEX_BASE_URL).strip().rstrip("/")
     if not base_url:
         base_url = DEFAULT_CODEX_BASE_URL
     return CodexRuntime(base_url=base_url, access_token=tokens.access_token)
@@ -120,9 +120,9 @@ class CodexClient:
 
         默认 True（沿用 httpx 默认行为）。但在某些环境里，代理变量会被自动注入且不可用，
         会导致出现 `RemoteProtocolError: Server disconnected without sending a response` 等难定位问题。
-        此时可设置 `PROJECT_X_CODEX_HTTP_TRUST_ENV=0` 来禁用环境代理。
+        此时可设置 `BIONIC_BOT_CODEX_HTTP_TRUST_ENV=0` 来禁用环境代理。
         """
-        raw = os.getenv("PROJECT_X_CODEX_HTTP_TRUST_ENV", "").strip()
+        raw = os.getenv("BIONIC_BOT_CODEX_HTTP_TRUST_ENV", "").strip()
         if not raw:
             return True
         return CodexClient._parse_env_bool(raw)
@@ -133,10 +133,10 @@ class CodexClient:
         显式指定 Codex HTTP 代理（优先级高于环境变量代理）。
 
         用法示例：
-        - `PROJECT_X_CODEX_HTTP_PROXY=socks5h://127.0.0.1:7890`
-        - `PROJECT_X_CODEX_HTTP_PROXY=http://127.0.0.1:7890`
+        - `BIONIC_BOT_CODEX_HTTP_PROXY=socks5h://127.0.0.1:7890`
+        - `BIONIC_BOT_CODEX_HTTP_PROXY=http://127.0.0.1:7890`
         """
-        raw = os.getenv("PROJECT_X_CODEX_HTTP_PROXY", "").strip()
+        raw = os.getenv("BIONIC_BOT_CODEX_HTTP_PROXY", "").strip()
         return raw or None
 
     @staticmethod
@@ -172,28 +172,28 @@ class CodexClient:
         这里的重试只覆盖“完全没有任何流式事件产出”的场景：
         - 如果已经开始有 delta（文本/推理/工具参数）了，再重试会造成前端内容重复，得不偿失。
         """
-        raw = os.getenv("PROJECT_X_CODEX_HTTP_MAX_RETRIES", "").strip()
+        raw = os.getenv("BIONIC_BOT_CODEX_HTTP_MAX_RETRIES", "").strip()
         if not raw:
             return 5
         try:
             value = int(raw)
         except (TypeError, ValueError):
-            raise ValueError(f"PROJECT_X_CODEX_HTTP_MAX_RETRIES 必须是整数，但拿到的是：{raw!r}")
+            raise ValueError(f"BIONIC_BOT_CODEX_HTTP_MAX_RETRIES 必须是整数，但拿到的是：{raw!r}")
         if value < 0:
-            raise ValueError(f"PROJECT_X_CODEX_HTTP_MAX_RETRIES 必须 >= 0，但拿到的是：{raw!r}")
+            raise ValueError(f"BIONIC_BOT_CODEX_HTTP_MAX_RETRIES 必须 >= 0，但拿到的是：{raw!r}")
         return value
 
     @staticmethod
     def _http_retry_backoff_s() -> float:
-        raw = os.getenv("PROJECT_X_CODEX_HTTP_RETRY_BACKOFF_S", "").strip()
+        raw = os.getenv("BIONIC_BOT_CODEX_HTTP_RETRY_BACKOFF_S", "").strip()
         if not raw:
             return 0.5
         try:
             value = float(raw)
         except (TypeError, ValueError):
-            raise ValueError(f"PROJECT_X_CODEX_HTTP_RETRY_BACKOFF_S 必须是数字，但拿到的是：{raw!r}")
+            raise ValueError(f"BIONIC_BOT_CODEX_HTTP_RETRY_BACKOFF_S 必须是数字，但拿到的是：{raw!r}")
         if value < 0:
-            raise ValueError(f"PROJECT_X_CODEX_HTTP_RETRY_BACKOFF_S 必须 >= 0，但拿到的是：{raw!r}")
+            raise ValueError(f"BIONIC_BOT_CODEX_HTTP_RETRY_BACKOFF_S 必须 >= 0，但拿到的是：{raw!r}")
         return value
 
     @staticmethod
@@ -202,11 +202,11 @@ class CodexClient:
         默认超时偏保守（更快失败），但真实 API/集成测试在网络不稳定时会更容易抖动。
 
         优先级（从高到低）：
-        - PROJECT_X_CODEX_HTTP_TIMEOUT_S：明确只影响 Codex HTTP
-        - PROJECT_X_INTEGRATION_TIMEOUT_S：给集成测试统一调参用
+        - BIONIC_BOT_CODEX_HTTP_TIMEOUT_S：明确只影响 Codex HTTP
+        - BIONIC_BOT_INTEGRATION_TIMEOUT_S：给集成测试统一调参用
         - 60 秒默认值
         """
-        for env_key in ("PROJECT_X_CODEX_HTTP_TIMEOUT_S", "PROJECT_X_INTEGRATION_TIMEOUT_S"):
+        for env_key in ("BIONIC_BOT_CODEX_HTTP_TIMEOUT_S", "BIONIC_BOT_INTEGRATION_TIMEOUT_S"):
             raw = os.getenv(env_key, "").strip()
             if not raw:
                 continue
@@ -227,12 +227,12 @@ class CodexClient:
 
         这里尽量模仿 codex CLI 的指纹：
         - originator: codex_cli_rs
-        - User-Agent: codex_cli_rs/... (Project X)
+        - User-Agent: codex_cli_rs/... (Bionic Bot)
         - ChatGPT-Account-ID: 从 OAuth JWT claim 里解析（解析失败则忽略）
         """
         headers: dict[str, str] = {
             "originator": "codex_cli_rs",
-            "User-Agent": "codex_cli_rs/0.0.0 (Project X)",
+            "User-Agent": "codex_cli_rs/0.0.0 (Bionic Bot)",
         }
 
         token = str(access_token or "").strip()
@@ -465,7 +465,7 @@ class CodexClient:
                                 raise RuntimeError(
                                     "Codex OAuth 凭据可能已过期或无权限（401/403）。"
                                     "请先确保 Codex CLI 能正常登录并生成 ~/.codex/auth.json，"
-                                    "然后删除 ~/.project-x/auth.json 让 project-x 重新导入。"
+                                    "然后删除 ~/.bionic-bot/auth.json 让 bionic-bot 重新导入。"
                                 ) from exc
                             raise
                         async for event in self._sse_events(response=resp):
@@ -560,7 +560,7 @@ class CodexClient:
                     proxy_env = self._proxy_env_snapshot()
                     hint_lines: list[str] = []
                     if proxy_override is not None:
-                        hint_lines.append(f"- 当前使用 PROJECT_X_CODEX_HTTP_PROXY={proxy_override!r}")
+                        hint_lines.append(f"- 当前使用 BIONIC_BOT_CODEX_HTTP_PROXY={proxy_override!r}")
                     else:
                         if proxy_env:
                             hint_lines.append(f"- 当前进程检测到代理环境变量：{proxy_env!r}")
@@ -569,10 +569,10 @@ class CodexClient:
                                     "- 检测到代理值疑似未展开的 shell 变量（例如字面量 '$http_proxy'）。"
                                     "如果你在 IDE 里引用 ~/.zshenv/.bashrc 作为 env 文件，通常不会展开 $VAR；"
                                     "请在 Run/Debug Configuration 里填入完整代理 URL，"
-                                    "或改用 PROJECT_X_CODEX_HTTP_PROXY 显式指定。"
+                                    "或改用 BIONIC_BOT_CODEX_HTTP_PROXY 显式指定。"
                                 )
-                            hint_lines.append("- 可尝试设置 PROJECT_X_CODEX_HTTP_TRUST_ENV=0 禁用环境代理")
-                            hint_lines.append("- 或设置 PROJECT_X_CODEX_HTTP_PROXY 显式指定可用代理（如 socks5h://...）")
+                            hint_lines.append("- 可尝试设置 BIONIC_BOT_CODEX_HTTP_TRUST_ENV=0 禁用环境代理")
+                            hint_lines.append("- 或设置 BIONIC_BOT_CODEX_HTTP_PROXY 显式指定可用代理（如 socks5h://...）")
                     hint = "\n".join(hint_lines)
                     message = (
                         "Codex 网络请求失败（未收到任何流式事件）。\n"

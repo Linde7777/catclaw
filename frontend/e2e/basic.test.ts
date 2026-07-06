@@ -28,9 +28,9 @@ test.beforeEach(async () => {
 })
 
 test.afterAll(async () => {
-  const baseRoot = process.env.PROJECT_X_E2E_BASE_ROOT
+  const baseRoot = process.env.BIONIC_BOT_E2E_BASE_ROOT
   if (!baseRoot) {
-    console.log('[e2e] 未找到 PROJECT_X_E2E_BASE_ROOT；无法打印 /tmp/project-x-e2e-{id} 目录路径')
+    console.log('[e2e] 未找到 BIONIC_BOT_E2E_BASE_ROOT；无法打印 /tmp/bionic-bot-e2e-{id} 目录路径')
     return
   }
 

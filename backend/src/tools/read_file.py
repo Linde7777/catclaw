@@ -117,7 +117,7 @@ class _MainCwdProvider:
 async def main() -> None:
     tool = create_read_file_tool(cwd_provider=_MainCwdProvider())
     tool_input = ReadFileInput(
-        filepath="/home/bruce/projects/project-x/demos/temp.txt",
+        filepath="/home/bruce/projects/bionic-bot/demos/temp.txt",
         line_range_start=1,
         line_range_end=20,
     )
@@ -130,4 +130,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-    # nl -ba /home/bruce/projects/project-x/demos/temp.txt | sed -n '1,20p'
+    # nl -ba /home/bruce/projects/bionic-bot/demos/temp.txt | sed -n '1,20p'

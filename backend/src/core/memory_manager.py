@@ -1,6 +1,6 @@
 from typing import Any
 
-from src.core.init_prompts import TAG_PROJECT_X_INSTRUCTION
+from src.core.init_prompts import TAG_BIONIC_BOT_INSTRUCTION
 from src.commons import MEMORY_MAIN_MD, MEMORY_TODO_MD, WAKE_MM_SUMMARY_FLAG, SUMMARIES_DIR
 from src.core.init_prompts import read_main_memory
 
@@ -10,7 +10,7 @@ from src.tools.tool import Tool
 from src.core.memory_manager_run_logger import MemoryManagerRunLogger
 from src.core.model_config import ModelConfig
 
-RESET_CONTEXT_MAGIC_WORD = "PROJECT-X-RESET-CONTEXT"
+RESET_CONTEXT_MAGIC_WORD = "BIONIC-BOT-RESET-CONTEXT"
 
 
 class SummarizerRunner:
@@ -235,7 +235,7 @@ def build_summarizer_instruction(is_first_time_awaken: bool) -> str:
 
 再次强调，***摘要要达成的效果是：当你清空了上下文，然后再加载你之前写的摘要时，你能够像没清空之前那样无缝地继续工作***
 
-不要对上下文中<{TAG_PROJECT_X_INSTRUCTION}>以及这之前的指令做摘要，因为这些信息在重置后系统会自动注入
+不要对上下文中<{TAG_BIONIC_BOT_INSTRUCTION}>以及这之前的指令做摘要，因为这些信息在重置后系统会自动注入
 
 {summarizer_operation_history_prompt}
 

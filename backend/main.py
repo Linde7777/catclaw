@@ -17,8 +17,8 @@ def main():
     app = build_app()
     uvicorn.run(
         app,
-        host=os.getenv("PROJECT_X_HOST", "127.0.0.1"),
-        port=int(os.getenv("PROJECT_X_PORT", "8000")),
+        host=os.getenv("BIONIC_BOT_HOST", "127.0.0.1"),
+        port=int(os.getenv("BIONIC_BOT_PORT", "8000")),
     )
 
 

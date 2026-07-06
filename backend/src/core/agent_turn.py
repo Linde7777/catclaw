@@ -465,7 +465,7 @@ async def stream(*, model_config: ModelConfig,
     if model_config.provider != "litellm":
         raise ValueError(f"暂不支持的 provider: {model_config.provider}")
     if model_config.model == "mock":
-        delay_ms_text = os.getenv("PROJECT_X_MOCK_MODEL_DELAY_MS", "0").strip()
+        delay_ms_text = os.getenv("BIONIC_BOT_MOCK_MODEL_DELAY_MS", "0").strip()
         try:
             delay_ms = int(delay_ms_text)
         except ValueError:

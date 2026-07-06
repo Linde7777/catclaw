@@ -11,8 +11,8 @@
 - **核心抽象是 `Agent`**：`backend/src/core/agent.py` 对外暴露一个最小接口（排队 user message → `async run()` 生成 → 工具调用 → 持久化）；其他模块基本都在为它服务。
 - **`AgentRunner` 是驱动层**：`backend/src/core/agent_runner.py` 负责“提交消息 + 确保后台运行 + 防重入 + 跑到 idle”，适配层（如 WebSocket）只和它交互，避免直接操作 `Agent`。
 - **`WebSocketChatSession` 是适配层**：`backend/src/websocket_chat_session.py` 通过 `AgentRunner` 驱动 agent（busy/idle/turn 完成回调），并把回调投影成前端事件（assistant delta / tool card / committed 等）。
-- **`ConversationStore` 是持久化层**：`backend/src/conversation_store.py` 把对话落地到 `~/.project-x/memories/originals/*.json`，并负责追加消息与恢复历史 messages。
-- **Memory Manager 是双 runner**：触发点在 `Agent._maybe_wake_memory_manager()`；`summarizer runner` 维护 `~/.project-x/memories/summaries/MAIN.md` 等记忆文档，`decider runner` 只判断是否 reset-context（两者实现见 `backend/src/core/memory_manager.py`）。
+- **`ConversationStore` 是持久化层**：`backend/src/conversation_store.py` 把对话落地到 `~/.bionic-bot/memories/originals/*.json`，并负责追加消息与恢复历史 messages。
+- **Memory Manager 是双 runner**：触发点在 `Agent._maybe_wake_memory_manager()`；`summarizer runner` 维护 `~/.bionic-bot/memories/summaries/MAIN.md` 等记忆文档，`decider runner` 只判断是否 reset-context（两者实现见 `backend/src/core/memory_manager.py`）。
 - **工具缓存约束**：AI 看到的 tools 集合/顺序对 provider 缓存敏感。即使 decider 逻辑上“不需要用工具”，也不要轻易改掉它暴露给模型的 tools 形状；若必须调整，优先最小化变更，并确认不会破坏缓存命中。
 - **provider 分叉**：`openai-codex` 走手写 Codex client、单条 user-role init prompt、`apply_patch` 工具；其他 provider 走 LiteLLM 路径、system+user init messages、`replace_text/insert_text` 工具。排查行为差异时先确认当前 provider。
 - src/commons.py 含有项目里面常用的变量、函数，必读
@@ -36,34 +36,34 @@
 
 ## 开发与运行（常用）
 - 一键启动：根目录 `dev.sh`
-  - 启动前会做外网连通性检查（可用 `PROJECT_X_SKIP_INTERNET_CHECK=1` 跳过）
+  - 启动前会做外网连通性检查（可用 `BIONIC_BOT_SKIP_INTERNET_CHECK=1` 跳过）
   - 后端先起，再等待 `/healthz`
   - 然后启动前端 `npm run dev`
-  - 支持 `PROJECT_X_E2E_PORT` 固定前端端口；Codespaces 下会监听 `0.0.0.0`
-- 后端入口：`backend/main.py`（`PROJECT_X_HOST`/`PROJECT_X_PORT`）
+  - 支持 `BIONIC_BOT_E2E_PORT` 固定前端端口；Codespaces 下会监听 `0.0.0.0`
+- 后端入口：`backend/main.py`（`BIONIC_BOT_HOST`/`BIONIC_BOT_PORT`）
 - 后端测试：在 `backend/` 下直接运行 `uv run pytest -q`；指定测试文件也用 `uv run pytest -q tests/...`，不需要写 `PYTHONPATH=.`
-- 前端开发代理：`frontend/vite.config.ts` 代理 `/healthz`、`/ws` 到 `PROJECT_X_BACKEND_ORIGIN`（默认 `http://127.0.0.1:8000`）
+- 前端开发代理：`frontend/vite.config.ts` 代理 `/healthz`、`/ws` 到 `BIONIC_BOT_BACKEND_ORIGIN`（默认 `http://127.0.0.1:8000`）
 - 回调约定：可选回调参数如果允许为 `None`，初始化时用 `backend/src/commons.py` 里的 `noop` 替代，避免到处写 `if callback is None`。
 
 ### 环境变量速查（最常用）
-- `PROJECT_X_MODEL_CONFIG`：模型选择（`openai-codex`/`deepseek-v4-pro`/`deepseek-v4-flash`/`qwen3.5-plus`/`qwen3.5-flash`/`mock`）；默认 `openai-codex`
+- `BIONIC_BOT_MODEL_CONFIG`：模型选择（`openai-codex`/`deepseek-v4-pro`/`deepseek-v4-flash`/`qwen3.5-plus`/`qwen3.5-flash`/`mock`）；默认 `openai-codex`
   - 选 openai-codex: 需要在本机已登陆codex cli。默认用这个。
   - 选 deepseek：需要 `DEEPSEEK_API_KEY`
   - 选 qwen：需要 `DASHSCOPE_API_KEY`
-  - 选 mock：不需要外部 API key；可用 `PROJECT_X_MOCK_MODEL_DELAY_MS` 模拟延迟
-- `PROJECT_X_ROOT`：覆盖 `~/.project-x` 根目录
-- `PROJECT_X_DEFAULT_CWD`：覆盖默认 worker cwd（默认 `~/x-space`）
-- `PROJECT_X_MEMORIES_ROOT`：覆盖 `~/.project-x/memories`（包含 `originals/`、`summaries/`、`logs/`）
-- `PROJECT_X_HOST` / `PROJECT_X_PORT`：后端监听地址与端口
-- `PROJECT_X_BACKEND_ORIGIN`：前端 Vite 代理目标（默认 `http://127.0.0.1:8000`）
-- `PROJECT_X_HF_CACHE_DIR`：tokenizer/HF 缓存目录（主要给精确 token 统计预留；当前 `TokenCounter` 默认走字符估算）
-- `PROJECT_X_CODEX_BASE_URL`：可覆盖 Codex client 的 base URL
+  - 选 mock：不需要外部 API key；可用 `BIONIC_BOT_MOCK_MODEL_DELAY_MS` 模拟延迟
+- `BIONIC_BOT_ROOT`：覆盖 `~/.bionic-bot` 根目录
+- `BIONIC_BOT_DEFAULT_CWD`：覆盖默认 worker cwd（默认 `~/x-space`）
+- `BIONIC_BOT_MEMORIES_ROOT`：覆盖 `~/.bionic-bot/memories`（包含 `originals/`、`summaries/`、`logs/`）
+- `BIONIC_BOT_HOST` / `BIONIC_BOT_PORT`：后端监听地址与端口
+- `BIONIC_BOT_BACKEND_ORIGIN`：前端 Vite 代理目标（默认 `http://127.0.0.1:8000`）
+- `BIONIC_BOT_HF_CACHE_DIR`：tokenizer/HF 缓存目录（主要给精确 token 统计预留；当前 `TokenCounter` 默认走字符估算）
+- `BIONIC_BOT_CODEX_BASE_URL`：可覆盖 Codex client 的 base URL
 
 ## 后端（围绕 Agent 的三层）
 
 ### 1) `Agent`：对外接口与不变量（`backend/src/core/agent.py`）
 对外接口（最常用的 5 个）：
-- `start_conversation()`：连接建立时调用；若 `~/.project-x/memories/originals/` 下存在历史文件则自动恢复“最新一份”，否则初始化一个新 segment（仅把 init messages 放进内存，不会立刻落盘）
+- `start_conversation()`：连接建立时调用；若 `~/.bionic-bot/memories/originals/` 下存在历史文件则自动恢复“最新一份”，否则初始化一个新 segment（仅把 init messages 放进内存，不会立刻落盘）
 - `enqueue_user_message(frontend_msg_id=..., user_message=...)`：排队一条 user message（`frontend_msg_id` 由前端生成，用于 committed 回传；若当前处于 paused/pause_requested，会先自动 `resume()`）
 - `run()`：异步生成循环：drain 队列 → 调模型（流式回调）→（可选）执行工具 → 持久化 → 再 drain → 直到没有 tool_calls 或命中暂停检查点
 - `drive_decision()`：runner 是否应该自动继续调用 `run()`（把 pause gate / not_started / backlog 统一封装）
@@ -100,15 +100,15 @@
 - `backend/src/tools/apply_patch.py`：仅 `openai-codex` provider 默认暴露；按 Codex patch 语法改文件，并复用共享 cwd
 - `backend/src/tools/replace_text.py`：`create_replace_text_tool()`（支持 `literal/regex`；regex 为 Python `re` 语法，`DOTALL | MULTILINE`；替换文本里用 `$!1/$!2...` 引用捕获组；默认不允许多处匹配，避免误替换）
 - `backend/src/tools/insert_text.py`：`create_insert_text_tool()`（把文本插到 needle 前/后；needle 必须唯一，否则返回错误）
-- `backend/src/tools/cwd_state.py`：`CwdState` 是 bash/read_file/编辑工具共享 cwd 的小状态对象；worker cwd 还会落盘到 `~/.project-x/cwd_state.json`，新会话启动时恢复
+- `backend/src/tools/cwd_state.py`：`CwdState` 是 bash/read_file/编辑工具共享 cwd 的小状态对象；worker cwd 还会落盘到 `~/.bionic-bot/cwd_state.json`，新会话启动时恢复
  
 补充约束（很容易踩坑）：
-- 记忆目录写入守卫在 `backend/src/commons.py`：worker **只能**编辑 `~/.project-x/memories/summaries/TODO.md`；summarizer 不能编辑 `TODO.md`，应编辑 `MAIN.md` 或其他摘要文件。
+- 记忆目录写入守卫在 `backend/src/commons.py`：worker **只能**编辑 `~/.bionic-bot/memories/summaries/TODO.md`；summarizer 不能编辑 `TODO.md`，应编辑 `MAIN.md` 或其他摘要文件。
 - `replace_text/insert_text` 在失败时可能把大段内容落到 `/tmp/...` 并返回 `*_from_file` 路径供下一次调用复用（避免重复粘贴占 token）；这是工具的正常行为。
 - decider 虽然逻辑上“不该用工具”，但仍会看到同一组 tools；如果它真发了 tool_calls，系统会回一个假的 tool result 继续对话，以保住 provider 的工具缓存形状。
 
 ### 3) 持久化（`backend/src/conversation_store.py`）
-- 落地目录：`~/.project-x/memories/originals/`（可用 `PROJECT_X_MEMORIES_ROOT` 覆盖根目录，见 `backend/src/commons.py`）
+- 落地目录：`~/.bionic-bot/memories/originals/`（可用 `BIONIC_BOT_MEMORIES_ROOT` 覆盖根目录，见 `backend/src/commons.py`）
 - `conversation_id`：文件名 `<coolname>-<UTC时间戳>.json`
 - JSON 结构：`{ init_messages: [...], meta: { "memory-manager": {...}, "pause": {...} }, messages: [ {role, content, ...} ] }`
 - 给模型用的 runtime messages 会 strip 掉每条 message 的 `meta`（目前消息本身不带 meta）
@@ -116,7 +116,7 @@
 - memory manager meta 里除了 `summarizer-awaken-count` / `decider-awaken-count`，还有 `last-triggered-threshold` 和 `reset-carryover-messages`
 - pause meta 里会持久化 `requested` / `paused`
 - 兼容旧字段 `summary-awaken-count`
-- memory manager 的运行日志会写到 `~/.project-x/memories/logs/*.jsonl`（见 `backend/src/core/memory_manager_run_logger.py`）。
+- memory manager 的运行日志会写到 `~/.bionic-bot/memories/logs/*.jsonl`（见 `backend/src/core/memory_manager_run_logger.py`）。
 
 ## 服务层：把 Agent 暴露给前端
 

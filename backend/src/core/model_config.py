@@ -17,7 +17,7 @@ def _getenv(key: str) -> str:
     """
     目的：避免在 import 时因为缺少环境变量直接 KeyError。
 
-    - 本项目支持 `PROJECT_X_MODEL_CONFIG=mock`（不需要外部 API key）。
+    - 本项目支持 `BIONIC_BOT_MODEL_CONFIG=mock`（不需要外部 API key）。
     - 但如果这里用 `os.environ[...]`，即使不选该 provider，也会在 import 阶段崩溃。
     """
     return os.getenv(key, "")
@@ -53,7 +53,7 @@ MOCK = ModelConfig(model="mock", base_url="", api_key="")
 OPENAI_CODEX = ModelConfig(
     model="gpt-5.4",
     # Codex 的 base_url 默认交给 CodexClient 走 env/默认值：
-    # - PROJECT_X_CODEX_BASE_URL
+    # - BIONIC_BOT_CODEX_BASE_URL
     # - DEFAULT_CODEX_BASE_URL
     #
     # 如需覆盖（例如接入代理/自建网关），上游显式传 ModelConfig(base_url=...)。

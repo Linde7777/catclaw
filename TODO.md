@@ -77,7 +77,7 @@ conversation.switched 和 paused 好像没有关联吧？你都能切换对话�
 
 ## “如果当前摘要记忆过于精简，无法支持当前任务，你应当创建 subagent 去搜索完整原始记忆。”
 对 subagent 的prompt：
-搜索 ~/.project-x/memories/originals 中的相关 JSON 记录。
+搜索 ~/.bionic-bot/memories/originals 中的相关 JSON 记录。
 返回与当前任务相关的信息。
 如果结果很长，不要完整复述原文，只需要告诉你相关信息的位置和简要摘要。
 原因：AI 输出成本通常高于输入成本，应避免大段重复输出。

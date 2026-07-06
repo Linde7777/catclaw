@@ -14,8 +14,8 @@ from tests.integration.integration_timeout import integration_timeout_s
 
 
 pytestmark = pytest.mark.skipif(
-    os.getenv("PROJECT_X_RUN_REAL_API_TESTS", "").strip() != "1",
-    reason="默认跳过真实 API/端到端集成测试；如需运行请设置环境变量 PROJECT_X_RUN_REAL_API_TESTS=1。",
+    os.getenv("BIONIC_BOT_RUN_REAL_API_TESTS", "").strip() != "1",
+    reason="默认跳过真实 API/端到端集成测试；如需运行请设置环境变量 BIONIC_BOT_RUN_REAL_API_TESTS=1。",
 )
 
 
@@ -75,9 +75,9 @@ def _wait_until_ready(*, origin: str, timeout_s: float = 10.0) -> None:
 def _ensure_real_model_ready_or_skip() -> None:
     from src.websocket_chat_session import resolve_model_config
 
-    model_key = os.getenv("PROJECT_X_MODEL_CONFIG", "").strip()
+    model_key = os.getenv("BIONIC_BOT_MODEL_CONFIG", "").strip()
     if model_key == "mock":
-        pytest.skip("当前 PROJECT_X_MODEL_CONFIG=mock，本测试要求真实模型。")
+        pytest.skip("当前 BIONIC_BOT_MODEL_CONFIG=mock，本测试要求真实模型。")
     try:
         resolve_model_config()
     except Exception as exc:

@@ -21,7 +21,7 @@ frontend_pid=""
 check_internet_connectivity() {
   # 这里的“外网”按能否访问 Google 来粗略判断（便于快速发现网络被限制/代理未生效的情况）。
   # 失败只做告警，不阻断本地开发启动。
-  if [[ -n "${PROJECT_X_SKIP_INTERNET_CHECK:-}" ]]; then
+  if [[ -n "${BIONIC_BOT_SKIP_INTERNET_CHECK:-}" ]]; then
     return 0
   fi
 
@@ -47,7 +47,7 @@ check_internet_connectivity() {
   fi
 
   if [[ "${ok}" != "true" ]]; then
-    echo "警告：外网连接检测失败（Google 不可达）。默认情况下 Codex 订阅可能无法连接；请检查代理/VPN/网络策略，或设置 PROJECT_X_SKIP_INTERNET_CHECK=1 跳过此检查。" >&2
+    echo "警告：外网连接检测失败（Google 不可达）。默认情况下 Codex 订阅可能无法连接；请检查代理/VPN/网络策略，或设置 BIONIC_BOT_SKIP_INTERNET_CHECK=1 跳过此检查。" >&2
   fi
 }
 
@@ -91,7 +91,7 @@ echo "启动后端：backend/（PYTHONPATH=. uv run python main.py）"
 backend_pid="$!"
 
 wait_for_backend() {
-  local backend_port="${PROJECT_X_PORT:-8000}"
+  local backend_port="${BIONIC_BOT_PORT:-8000}"
   local url="http://127.0.0.1:${backend_port}/healthz"
 
   echo "等待后端就绪（/healthz）：${url}" >&2
@@ -123,7 +123,7 @@ wait_for_backend() {
 }
 
 (
-  if [[ -z "${PROJECT_X_SKIP_BACKEND_WAIT:-}" ]]; then
+  if [[ -z "${BIONIC_BOT_SKIP_BACKEND_WAIT:-}" ]]; then
     wait_for_backend
   fi
   echo "启动前端：frontend/（npm run dev）"
@@ -135,8 +135,8 @@ wait_for_backend() {
     extra_args+=(--host 0.0.0.0)
   fi
 
-  if [[ -n "${PROJECT_X_E2E_PORT:-}" ]]; then
-    exec npm run dev -- "${extra_args[@]}" --port "${PROJECT_X_E2E_PORT}" --strictPort
+  if [[ -n "${BIONIC_BOT_E2E_PORT:-}" ]]; then
+    exec npm run dev -- "${extra_args[@]}" --port "${BIONIC_BOT_E2E_PORT}" --strictPort
   fi
   exec npm run dev -- "${extra_args[@]}"
 ) &

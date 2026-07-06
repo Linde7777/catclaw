@@ -36,13 +36,13 @@ class ReplaceTextToolTests(unittest.IsolatedAsyncioTestCase):
                 arguments={
                     "filepath": "demo.txt",
                     "needle": "world",
-                    "repl": "project-x",
+                    "repl": "bionic-bot",
                     "mode": "literal",
                 }
             )
 
             self.assertEqual(result, "ok")
-            self.assertEqual(path.read_text(encoding="utf-8"), "hello project-x\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello bionic-bot\n")
 
     async def test_replace_text_tool_errors_when_multiple_occurrences_not_allowed(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -131,7 +131,7 @@ class ReplaceTextToolTests(unittest.IsolatedAsyncioTestCase):
             path = cwd / "demo.txt"
             repl_file = cwd / "repl.txt"
             path.write_text("hello world\n", encoding="utf-8")
-            repl_file.write_text("project-x", encoding="utf-8")
+            repl_file.write_text("bionic-bot", encoding="utf-8")
 
             result = await create_replace_text_tool(cwd_provider=_CwdProvider(cwd)).handler(
                 arguments={
@@ -143,7 +143,7 @@ class ReplaceTextToolTests(unittest.IsolatedAsyncioTestCase):
             )
 
             self.assertEqual(result, "ok")
-            self.assertEqual(path.read_text(encoding="utf-8"), "hello project-x\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello bionic-bot\n")
 
 
 if __name__ == "__main__":

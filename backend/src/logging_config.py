@@ -21,11 +21,11 @@ def configure_logging() -> None:
 
     注意：如果 BASE_ROOT 不可写，会抛异常并阻止启动（避免“看似启动成功但日志全丢”）。
     """
-    console_level = _env_str("PROJECT_X_CONSOLE_LOG_LEVEL", "INFO").upper()
-    file_level = _env_str("PROJECT_X_FILE_LOG_LEVEL", "DEBUG").upper()
+    console_level = _env_str("BIONIC_BOT_CONSOLE_LOG_LEVEL", "INFO").upper()
+    file_level = _env_str("BIONIC_BOT_FILE_LOG_LEVEL", "DEBUG").upper()
     logs_dir = BASE_ROOT / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    log_path = logs_dir / _env_str("PROJECT_X_BACKEND_LOG_FILE", "backend.log")
+    log_path = logs_dir / _env_str("BIONIC_BOT_BACKEND_LOG_FILE", "backend.log")
 
     log_config: dict[str, Any] = {
         "version": 1,
@@ -48,8 +48,8 @@ def configure_logging() -> None:
                 "formatter": "default",
                 "filename": str(log_path),
                 "encoding": "utf-8",
-                "maxBytes": int(_env_str("PROJECT_X_BACKEND_LOG_MAX_BYTES", "10485760")),
-                "backupCount": int(_env_str("PROJECT_X_BACKEND_LOG_BACKUP_COUNT", "5")),
+                "maxBytes": int(_env_str("BIONIC_BOT_BACKEND_LOG_MAX_BYTES", "10485760")),
+                "backupCount": int(_env_str("BIONIC_BOT_BACKEND_LOG_BACKUP_COUNT", "5")),
             },
         },
         "root": {

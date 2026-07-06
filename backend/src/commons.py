@@ -4,10 +4,10 @@ from typing import Any, Literal
 
 # todo。在shell工具里面做alias，这样模型可以少输入一些token
 
-BASE_ROOT = Path(os.getenv("PROJECT_X_ROOT", "~/.project-x")).expanduser()
-DEFAULT_WORKER_CWD = Path(os.getenv("PROJECT_X_DEFAULT_CWD", "~/x-space")).expanduser().resolve()
+BASE_ROOT = Path(os.getenv("BIONIC_BOT_ROOT", "~/.bionic-bot")).expanduser()
+DEFAULT_WORKER_CWD = Path(os.getenv("BIONIC_BOT_DEFAULT_CWD", "~/x-space")).expanduser().resolve()
 CWD_STATE_FILEPATH = BASE_ROOT / "cwd_state.json"
-MEMORIES_ROOT = Path(os.getenv("PROJECT_X_MEMORIES_ROOT", str(BASE_ROOT / "memories"))).expanduser()
+MEMORIES_ROOT = Path(os.getenv("BIONIC_BOT_MEMORIES_ROOT", str(BASE_ROOT / "memories"))).expanduser()
 SUMMARIES_DIR = MEMORIES_ROOT / "summaries"
 DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000
 MODEL_CONTEXT_WINDOWS: dict[str, int] = {

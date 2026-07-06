@@ -63,8 +63,8 @@ def test_retries_when_no_events_emitted(monkeypatch) -> None:
         return client
 
     monkeypatch.setattr(codex_client_mod.httpx, "AsyncClient", _fake_async_client)
-    monkeypatch.setenv("PROJECT_X_CODEX_HTTP_MAX_RETRIES", "2")
-    monkeypatch.setenv("PROJECT_X_CODEX_HTTP_RETRY_BACKOFF_S", "0")
+    monkeypatch.setenv("BIONIC_BOT_CODEX_HTTP_MAX_RETRIES", "2")
+    monkeypatch.setenv("BIONIC_BOT_CODEX_HTTP_RETRY_BACKOFF_S", "0")
 
     client = object.__new__(CodexClient)
     client._runtime = type("R", (), {"access_token": "t", "base_url": "https://example.test"})()
@@ -120,8 +120,8 @@ def test_does_not_retry_after_partial_stream(monkeypatch) -> None:
     from src.pkg.handrolled_codex.client import CodexClient
     import src.pkg.handrolled_codex.client as codex_client_mod
 
-    monkeypatch.setenv("PROJECT_X_CODEX_HTTP_MAX_RETRIES", "2")
-    monkeypatch.setenv("PROJECT_X_CODEX_HTTP_RETRY_BACKOFF_S", "0")
+    monkeypatch.setenv("BIONIC_BOT_CODEX_HTTP_MAX_RETRIES", "2")
+    monkeypatch.setenv("BIONIC_BOT_CODEX_HTTP_RETRY_BACKOFF_S", "0")
 
     def _fake_async_client(*, timeout: httpx.Timeout, **kwargs):
         client = _FakeAsyncClient(timeout=timeout)

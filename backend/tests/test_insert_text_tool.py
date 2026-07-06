@@ -37,12 +37,12 @@ class InsertTextToolTests(unittest.IsolatedAsyncioTestCase):
                     "filepath": "demo.txt",
                     "needle": "world",
                     "direction": "before",
-                    "text": "project-x ",
+                    "text": "bionic-bot ",
                 }
             )
 
             self.assertEqual(result, "ok")
-            self.assertEqual(path.read_text(encoding="utf-8"), "hello project-x world\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello bionic-bot world\n")
 
     async def test_insert_text_tool_errors_when_needle_is_not_unique(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -92,7 +92,7 @@ class InsertTextToolTests(unittest.IsolatedAsyncioTestCase):
             path = cwd / "demo.txt"
             insert_file = cwd / "insert.txt"
             path.write_text("hello world\n", encoding="utf-8")
-            insert_file.write_text("project-x ", encoding="utf-8")
+            insert_file.write_text("bionic-bot ", encoding="utf-8")
 
             await create_insert_text_tool(cwd_provider=_CwdProvider(cwd)).handler(
                 arguments={
@@ -103,7 +103,7 @@ class InsertTextToolTests(unittest.IsolatedAsyncioTestCase):
                 }
             )
 
-            self.assertEqual(path.read_text(encoding="utf-8"), "hello project-x world\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello bionic-bot world\n")
 
     async def test_insert_text_tool_supports_insert_after(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -116,11 +116,11 @@ class InsertTextToolTests(unittest.IsolatedAsyncioTestCase):
                     "filepath": "demo.txt",
                     "needle": "hello",
                     "direction": "after",
-                    "text": " project-x",
+                    "text": " bionic-bot",
                 }
             )
 
-            self.assertEqual(path.read_text(encoding="utf-8"), "hello project-x world\n")
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello bionic-bot world\n")
 
 
 if __name__ == "__main__":
