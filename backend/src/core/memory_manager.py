@@ -1,7 +1,7 @@
 from typing import Any
 
 from src.core.init_prompts import TAG_BIONIC_BOT_INSTRUCTION
-from src.commons import MEMORY_MAIN_MD, MEMORY_TODO_MD, WAKE_MM_SUMMARY_FLAG, SUMMARIES_DIR
+from src.commons import MEMORY_MAIN_MD, MEMORY_TODO_MD, SUMMARIES_DIR
 from src.core.init_prompts import read_main_memory
 
 from src.commons import noop
@@ -21,6 +21,7 @@ class SummarizerRunner:
             model_config: ModelConfig,
             tools: list[Tool],
             is_first_time_awaken: bool,
+            last_summarized_signature: str,
             conversation_file_name: str,
             awaken_round: int,
     ) -> None:
@@ -44,6 +45,7 @@ class SummarizerRunner:
             "role": "user",
             "content": build_summarizer_instruction(
                 is_first_time_awaken=is_first_time_awaken,
+                last_summarized_signature=last_summarized_signature,
             ),
         }
         forked_messages.append(
@@ -192,7 +194,7 @@ class DeciderRunner:
         return should_reset
 
 
-def build_summarizer_instruction(is_first_time_awaken: bool) -> str:
+def build_summarizer_instruction(is_first_time_awaken: bool, last_summarized_signature: str) -> str:
     if is_first_time_awaken:
         summarizer_operation_history_prompt = (f"<summarizer_operation_history_info>"
                                            f"这是你第一次在当前会话中被唤醒，"
@@ -203,7 +205,11 @@ def build_summarizer_instruction(is_first_time_awaken: bool) -> str:
 <summarizer_operation_history_info>
 这不是你第一次在当前会话中被唤醒，你之前已经处理过记忆文档。
 
-你上一次被唤醒的地方是*最近的*那条 {WAKE_MM_SUMMARY_FLAG} 消息，在那之前的内容都已经被之前的你摘要过了。
+你上一次被唤醒的边界消息签名是：
+<signature>
+{last_summarized_signature}
+</signature>
+这条边界消息以及它之前的内容，都已经被之前的你摘要过了。
 
 这是当前 {MEMORY_MAIN_MD} 的内容（你等会不需要再调用工具去读一遍了）：
 <{MEMORY_MAIN_MD}>
@@ -264,8 +270,6 @@ def build_decider_instruction() -> str:
 例外情况：如果预估worker还有几轮就可以完成任务，而这时刚好大约有50%的内容是不重要的，那么这个时候一般不建议重置。如果你感觉很难预估，那你就认为需要很久才能完成任务就行了。
 
 如果判断出要重置上下文，你就输出 {RESET_CONTEXT_MAGIC_WORD} ，系统检测到后，就会重置
-
-你可能会在上下文中看到 {WAKE_MM_SUMMARY_FLAG}，你不需要去管这个
 
 你会看到一些工具，但是你不能去使用它们，因为判断是否需要重置上下文并不需要工具
 

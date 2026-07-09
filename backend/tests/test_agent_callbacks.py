@@ -8,7 +8,6 @@ from pathlib import Path
 from unittest import mock
 
 from src.conversation_store import ConversationStore
-from src.commons import WAKE_MM_SUMMARY_FLAG
 from src.core.agent import Agent
 from src.core.agent_turn import Tool, TurnResult, TurnUsage, execute_tool_calls
 from src.core.model_config import ModelConfig
@@ -733,12 +732,10 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(decider_runner.calls), 1)
         self.assertEqual(agent._summarizer_awaken_count, 1)
         self.assertEqual(agent._decider_awaken_count, 1)
-        self.assertEqual(
-            sum(1 for m in agent._messages if m.get("role") == "user" and m.get("content") == WAKE_MM_SUMMARY_FLAG),
-            1,
-        )
+        self.assertEqual(agent._conversation_store.memory_manager_last_summarized_msg_idx, 2)  # type: ignore[union-attr]
+        self.assertEqual(agent._conversation_store.memory_manager_last_summarized_signature, '{"echoed": 1}')  # type: ignore[union-attr]
 
-    async def test_reset_carryover_reuses_existing_summary_flag_boundary(self) -> None:
+    async def test_reset_carryover_uses_last_summarized_msg_idx_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with _patch_agent_conversation_store_without_history(temp_dir):
                 agent = Agent(
@@ -750,11 +747,59 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 agent.start_conversation()
                 agent.enqueue_user_message(frontend_msg_id="u1", user_message="hello")
                 agent._safe_drain_user_message_queue()
-                agent._append_runtime_message({"role": "user", "content": WAKE_MM_SUMMARY_FLAG})
-                agent._append_runtime_message({"role": "assistant", "content": "after-flag"})
+                agent._append_runtime_message({"role": "assistant", "content": "before-boundary"})
+                agent._append_runtime_message({"role": "assistant", "content": "after-boundary"})
+                agent._require_conversation_store().update_memory_manager_last_summarized_boundary(
+                    msg_idx=1,
+                    signature="before......dary",
+                )
                 self.assertEqual(
                     agent._build_reset_carryover_messages(),
-                    [{"role": "assistant", "content": "after-flag"}],
+                    [{"role": "assistant", "content": "after-boundary"}],
+                )
+
+    async def test_second_summarizer_wakeup_uses_previous_boundary_signature(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patch_agent_conversation_store_without_history(temp_dir):
+                agent = Agent(
+                    name="demo",
+                    model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
+                    init_messages=[{"role": "user", "content": "user-1"}],
+                    tools=[],
+                )
+                agent.start_conversation()
+                agent.enqueue_user_message(frontend_msg_id="u1", user_message="hello")
+                agent._safe_drain_user_message_queue()
+                agent._append_runtime_message({"role": "assistant", "content": "first-boundary"})
+
+                summarizer_runner = _StaticSummarizerRunner()
+                decider_runner = _StaticDeciderRunner(should_reset_context=False)
+                agent._summarizer_runner = summarizer_runner
+                agent._decider_runner = decider_runner
+
+                with mock.patch("src.core.agent.get_model_context_window_tokens", return_value=100):
+                    await agent._maybe_wake_memory_manager(prompt_tokens=3)
+                    await _wait_for_memory_manager_background_tasks(agent)
+
+                    first_boundary_signature = agent._require_conversation_store().memory_manager_last_summarized_signature
+
+                    agent._require_conversation_store().update_memory_manager_last_triggered_threshold(
+                        last_triggered_threshold=0,
+                    )
+                    agent._append_runtime_message({"role": "assistant", "content": "second-boundary"})
+
+                    await agent._maybe_wake_memory_manager(prompt_tokens=3)
+                    await _wait_for_memory_manager_background_tasks(agent)
+
+                self.assertEqual(len(summarizer_runner.calls), 2)
+                self.assertEqual(summarizer_runner.calls[0]["last_summarized_signature"], "")
+                self.assertEqual(
+                    summarizer_runner.calls[1]["last_summarized_signature"],
+                    first_boundary_signature,
+                )
+                self.assertEqual(
+                    agent._require_conversation_store().memory_manager_last_summarized_signature,
+                    "second-boundary",
                 )
 
 

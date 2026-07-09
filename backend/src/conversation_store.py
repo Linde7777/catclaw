@@ -13,6 +13,8 @@ MEMORY_MANAGER_SUMMARIZER_AWAKEN_COUNT_KEY = "summarizer-awaken-count"
 MEMORY_MANAGER_DECIDER_AWAKEN_COUNT_KEY = "decider-awaken-count"
 MEMORY_MANAGER_LAST_TRIGGERED_THRESHOLD_KEY = "last-triggered-threshold"
 MEMORY_MANAGER_RESET_CARRYOVER_MESSAGES_KEY = "reset-carryover-messages"
+MEMORY_MANAGER_LAST_SUMMARIZED_MSG_IDX_KEY = "last-summarized-msg-idx"
+MEMORY_MANAGER_LAST_SUMMARIZED_SIGNATURE_KEY = "last-summarized-signature"
 PAUSE_META_KEY = "pause"
 PAUSE_REQUESTED_KEY = "requested"
 PAUSE_PAUSED_KEY = "paused"
@@ -71,6 +73,8 @@ class ConversationStore:
         self._decider_awaken_count = 0
         self._memory_manager_last_triggered_threshold = 0
         self._memory_manager_reset_carryover_messages: list[dict[str, Any]] = []
+        self._memory_manager_last_summarized_msg_idx: int | None = None
+        self._memory_manager_last_summarized_signature = ""
         self._pause_requested = False
         self._paused = False
 
@@ -106,6 +110,14 @@ class ConversationStore:
         return [dict(message) for message in self._memory_manager_reset_carryover_messages]
 
     @property
+    def memory_manager_last_summarized_msg_idx(self) -> int | None:
+        return self._memory_manager_last_summarized_msg_idx
+
+    @property
+    def memory_manager_last_summarized_signature(self) -> str:
+        return self._memory_manager_last_summarized_signature
+
+    @property
     def pause_requested(self) -> bool:
         return self._pause_requested
 
@@ -132,6 +144,14 @@ class ConversationStore:
         if not all(isinstance(message, dict) for message in messages):
             raise ValueError("reset carryover messages 必须全部是对象")
         self._memory_manager_reset_carryover_messages = [dict(message) for message in messages]
+        if self.has_persisted_conversation():
+            self._write_json_atomically()
+
+    def update_memory_manager_last_summarized_boundary(self, *, msg_idx: int | None, signature: str) -> None:
+        if msg_idx is not None and msg_idx < 0:
+            raise ValueError("last summarized msg idx 不能为负数")
+        self._memory_manager_last_summarized_msg_idx = msg_idx
+        self._memory_manager_last_summarized_signature = signature
         if self.has_persisted_conversation():
             self._write_json_atomically()
 
@@ -217,6 +237,8 @@ class ConversationStore:
             decider_awaken_count = memory_manager_meta.get(MEMORY_MANAGER_DECIDER_AWAKEN_COUNT_KEY)
             last_triggered_threshold = memory_manager_meta.get(MEMORY_MANAGER_LAST_TRIGGERED_THRESHOLD_KEY)
             reset_carryover_messages = memory_manager_meta.get(MEMORY_MANAGER_RESET_CARRYOVER_MESSAGES_KEY)
+            last_summarized_msg_idx = memory_manager_meta.get(MEMORY_MANAGER_LAST_SUMMARIZED_MSG_IDX_KEY)
+            last_summarized_signature = memory_manager_meta.get(MEMORY_MANAGER_LAST_SUMMARIZED_SIGNATURE_KEY)
             if isinstance(summarizer_awaken_count, int) and summarizer_awaken_count >= 0:
                 store._summarizer_awaken_count = summarizer_awaken_count
             if isinstance(decider_awaken_count, int) and decider_awaken_count >= 0:
@@ -227,6 +249,10 @@ class ConversationStore:
                 isinstance(message, dict) for message in reset_carryover_messages
             ):
                 store._memory_manager_reset_carryover_messages = [dict(message) for message in reset_carryover_messages]
+            if isinstance(last_summarized_msg_idx, int) and last_summarized_msg_idx >= 0:
+                store._memory_manager_last_summarized_msg_idx = last_summarized_msg_idx
+            if isinstance(last_summarized_signature, str):
+                store._memory_manager_last_summarized_signature = last_summarized_signature
 
         pause_meta = meta.get(PAUSE_META_KEY)
         if isinstance(pause_meta, dict):
@@ -291,6 +317,8 @@ class ConversationStore:
                     MEMORY_MANAGER_DECIDER_AWAKEN_COUNT_KEY: self._decider_awaken_count,
                     MEMORY_MANAGER_LAST_TRIGGERED_THRESHOLD_KEY: self._memory_manager_last_triggered_threshold,
                     MEMORY_MANAGER_RESET_CARRYOVER_MESSAGES_KEY: self._memory_manager_reset_carryover_messages,
+                    MEMORY_MANAGER_LAST_SUMMARIZED_MSG_IDX_KEY: self._memory_manager_last_summarized_msg_idx,
+                    MEMORY_MANAGER_LAST_SUMMARIZED_SIGNATURE_KEY: self._memory_manager_last_summarized_signature,
                 },
                 PAUSE_META_KEY: {
                     PAUSE_REQUESTED_KEY: self._pause_requested,

@@ -57,6 +57,7 @@ class ConversationStoreTests(unittest.TestCase):
                 decider_awaken_count=3,
             )
             store.update_memory_manager_last_triggered_threshold(last_triggered_threshold=12)
+            store.update_memory_manager_last_summarized_boundary(msg_idx=4, signature="hello......world")
 
             loaded_store = ConversationStore.load_from_conversation_file_name(
                 conversation_file_name=store.conversation_file_name,
@@ -66,6 +67,8 @@ class ConversationStoreTests(unittest.TestCase):
             self.assertEqual(loaded_store.summarizer_awaken_count, 2)
             self.assertEqual(loaded_store.decider_awaken_count, 3)
             self.assertEqual(loaded_store.memory_manager_last_triggered_threshold, 12)
+            self.assertEqual(loaded_store.memory_manager_last_summarized_msg_idx, 4)
+            self.assertEqual(loaded_store.memory_manager_last_summarized_signature, "hello......world")
 
     def test_pause_state_is_persisted_and_loaded(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

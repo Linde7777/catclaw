@@ -173,7 +173,7 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(agent._memory_manager_reset_task)
         self.assertTrue(agent._memory_manager_reset_task.done())
 
-    async def test_reset_carryover_keeps_messages_after_latest_summary_flag(self) -> None:
+    async def test_reset_carryover_keeps_messages_after_last_summarized_msg_idx(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with mock.patch("src.core.agent.ConversationStore") as store_cls:
                 store_cls.find_latest_conversation_file_name.return_value = None
@@ -185,19 +185,21 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                     tools=[],
                 )
                 agent.start_conversation()
-                agent.enqueue_user_message(frontend_msg_id="1", user_message="before-flag")
+                agent.enqueue_user_message(frontend_msg_id="1", user_message="before-boundary")
                 agent._safe_drain_user_message_queue()
-                agent._append_runtime_message({"role": "user", "content": "WAKE_MM_SUMMARY_FLAG"})
-                agent._append_runtime_message({"role": "assistant", "content": "after-flag"})
+                agent._append_runtime_message({"role": "assistant", "content": "after-boundary"})
                 agent._append_runtime_message({"role": "tool", "tool_call_id": "call_1", "content": "tool-result"})
+                agent._require_conversation_store().update_memory_manager_last_summarized_boundary(
+                    msg_idx=0,
+                    signature="before......dary",
+                )
 
-                with mock.patch("src.core.agent.WAKE_MM_SUMMARY_FLAG", "WAKE_MM_SUMMARY_FLAG"):
-                    carryover_messages = agent._build_reset_carryover_messages()
+                carryover_messages = agent._build_reset_carryover_messages()
 
                 self.assertEqual(
                     carryover_messages,
                     [
-                        {"role": "assistant", "content": "after-flag"},
+                        {"role": "assistant", "content": "after-boundary"},
                         {"role": "tool", "tool_call_id": "call_1", "content": "tool-result"},
                     ],
                 )

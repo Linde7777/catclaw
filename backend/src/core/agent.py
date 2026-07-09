@@ -22,7 +22,6 @@ from src.core.agent_turn import (
     OnToolResult,
 )
 from src.tools.tool import Tool
-from src.commons import WAKE_MM_SUMMARY_FLAG
 from src.core.memory_manager import (
     DeciderRunner,
     SummarizerRunner,
@@ -415,17 +414,52 @@ class Agent(AgentBase):
         self._on_paused()
 
     def _build_reset_carryover_messages(self) -> list[dict[str, Any]]:
-        business_messages = self._messages[len(self._init_messages):]
-        last_summarizer_flag_index: int | None = None
-        for index, message in enumerate(business_messages):
-            if message.get("role") == "user" and message.get("content") == WAKE_MM_SUMMARY_FLAG:
-                last_summarizer_flag_index = index
+        new_messages = self._messages[len(self._init_messages):]
+        last_summarized_msg_idx = self._require_conversation_store().memory_manager_last_summarized_msg_idx
+        if last_summarized_msg_idx is None:
+            logger.error(
+                "Agent[%s] reset_context 缺少 last_summarized_msg_idx（new_messages=%s）",
+                self.name,
+                len(new_messages),
+            )
+            raise RuntimeError("reset_context 缺少 last_summarized_msg_idx")
 
-        if last_summarizer_flag_index is None:
-            return [dict(message) for message in business_messages]
-
-        carryover_messages = business_messages[last_summarizer_flag_index + 1:]
+        carryover_messages = new_messages[last_summarized_msg_idx + 1:]
         return [dict(message) for message in carryover_messages]
+
+    def _build_last_summarized_boundary(self) -> tuple[int, str] | None:
+        new_messages = self._messages[len(self._init_messages):]
+        if not new_messages:
+            return None
+
+        last_msg_idx = len(new_messages) - 1
+        rendered_messages: list[str] = []
+        for message in new_messages:
+            content = message.get("content")
+            if isinstance(content, str):
+                rendered_messages.append(content)
+            else:
+                rendered_messages.append(json.dumps(content, ensure_ascii=False, separators=(",", ":")))
+
+        last_message_content = rendered_messages[last_msg_idx]
+        signature = last_message_content
+        max_window = min(60, len(last_message_content))
+        for window in range(10, max_window + 1):
+            if len(last_message_content) <= window * 2:
+                candidate = last_message_content
+            else:
+                candidate = f"{last_message_content[:window]}......{last_message_content[-window:]}"
+
+            matched_count = sum(1 for content in rendered_messages if content == last_message_content or (
+                len(content) <= window * 2 and candidate == content
+            ) or (
+                len(content) > window * 2 and candidate == f"{content[:window]}......{content[-window:]}"
+            ))
+            signature = candidate
+            if matched_count == 1:
+                break
+
+        return last_msg_idx, signature
 
     async def _handle_memory_manager_reset_request(self) -> None:
         self.request_pause()
@@ -481,6 +515,13 @@ class Agent(AgentBase):
         summarizer_task = self._summarizer_task
         if summarizer_task is None or summarizer_task.done():
             summarizer_round = self._summarizer_awaken_count + 1
+            previous_last_summarized_signature = conversation_store.memory_manager_last_summarized_signature
+            last_summarized_boundary = self._build_last_summarized_boundary()
+            if last_summarized_boundary is not None:
+                conversation_store.update_memory_manager_last_summarized_boundary(
+                    msg_idx=last_summarized_boundary[0],
+                    signature=last_summarized_boundary[1],
+                )
             worker_messages_snapshot = [dict(message) for message in self._messages]
             summarizer_tools = build_summarizer_tools(provider=self._model_config.provider)
             logger.info(
@@ -495,13 +536,13 @@ class Agent(AgentBase):
                     model_config=self._model_config,
                     tools=summarizer_tools,
                     is_first_time_awaken=self._summarizer_awaken_count == 0,
+                    last_summarized_signature=previous_last_summarized_signature,
                     conversation_file_name=conversation_store.conversation_file_name,
                     awaken_round=summarizer_round,
                 )
             )
             self._attach_summarizer_task_callbacks(task=summarizer_task)
             self._summarizer_task = summarizer_task
-            self._append_runtime_message({"role": "user", "content": WAKE_MM_SUMMARY_FLAG})
             self._summarizer_awaken_count = summarizer_round
             self._persist_memory_manager_state()
 
@@ -587,6 +628,7 @@ class Agent(AgentBase):
         ]
         conversation_store.start_with_messages(messages=carryover_messages)
         conversation_store.update_memory_manager_reset_carryover_messages(messages=[])
+        conversation_store.update_memory_manager_last_summarized_boundary(msg_idx=None, signature="")
         conversation_store.update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
         self._persist_pause_state()
         self._notify_switch_conversation(messages=self._messages)

@@ -1,7 +1,7 @@
 import unittest
 from unittest import mock
 
-from src.core.memory_manager import DeciderRunner, RESET_CONTEXT_MAGIC_WORD
+from src.core.memory_manager import DeciderRunner, RESET_CONTEXT_MAGIC_WORD, build_summarizer_instruction
 from src.core.agent_turn import TurnResult, TurnUsage
 from src.core.model_config import ModelConfig
 
@@ -50,6 +50,19 @@ class MemoryManagerDeciderRunnerTests(unittest.IsolatedAsyncioTestCase):
         requested = await self._run_with_final_content(None)
 
         self.assertFalse(requested)
+
+
+class MemoryManagerPromptTests(unittest.TestCase):
+    def test_build_summarizer_instruction_mentions_last_signature_instead_of_explicit_flag(self) -> None:
+        prompt = build_summarizer_instruction(
+            is_first_time_awaken=False,
+            last_summarized_signature="前十个字符......后十个字符",
+        )
+
+        self.assertIn("前十个字符......后十个字符", prompt)
+        self.assertIn("边界消息签名", prompt)
+        self.assertIn("这条边界消息以及它之前的内容", prompt)
+        self.assertNotIn("WAKE_MM_SUMMARY_FLAG", prompt)
 
 
 if __name__ == "__main__":
