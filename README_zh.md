@@ -11,6 +11,7 @@
 worker 的上下文每增长 3%，系统就自动从 worker 的上下文中 fork 一个 summarizer 和 decider 出来（利用缓存）。worker 不会暂停，而是会继续运行，就像人脑一样。这个设计会带来一些问题，后面会讲解决方法。
 
 在 fork summarizer 出来**之后**，系统会在 worker 的上下文中留一个 `WAKE_SUMMARIZER_FLAG`。注意这里是**之后**，这个新加入的 flag 在当前刚 fork 出来的 summarizer 的上下文中是不存在的，这个 flag 是给下一次被唤醒的 summarizer 服务的，具体作用在 `build_summarizer_instruction` 里面有说明。
+（其实系统并没有插入一个flag，系统是记录了一个隐性的flag，这里说有一个flag只是为了方便理解）
 
 边界情况之一：上一个 summarizer 还没跑完，现在又到了一个触发 summarizer 的节点，这个时候就不要再新开一个 summarizer，而是等到下次触发再说。
 

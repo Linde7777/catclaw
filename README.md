@@ -12,6 +12,7 @@ It is worth first skimming `backend/src/core/init_prompts.py` in `_build_codex_u
 Every time the worker's context grows by 3%, the system automatically forks a summarizer and a decider from the worker's context (using cache). The worker does not pause and keeps running, similar to how the human brain works. This design introduces some problems, which will be discussed later.
 
 After the summarizer is forked, the system leaves a `WAKE_SUMMARIZER_FLAG` in the worker's context. Note that this happens **after** the fork, so the newly forked summarizer does not see that flag in its own context. The flag is meant for the **next** summarizer wake-up. Its exact purpose is explained in `build_summarizer_instruction`.
+In practice, the system does not literally insert a flag. It records an implicit marker instead. Describing it as a flag is only a convenience for explanation.
 
 One edge case: if the previous summarizer has not finished yet and the next summarizer trigger point is reached, the system should not start another summarizer immediately. It should wait until the next trigger instead.
 
