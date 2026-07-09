@@ -43,7 +43,6 @@ Maybe a year from now, when large-model prices have dropped significantly, this 
 - `docs/feature-decisions.md`: product feature decisions
 - `docs/draft-plans`: my initial plans
 - `docs/plans`: plans written by AI based on those initial plans
-- `docs/code_explanations`: code explanations generated for me by AI. They are probably not very useful for other people. They were made with the [structured-knowledge](https://github.com/jenglong1899/structured-knowledge) skill.
 
 # Start
 

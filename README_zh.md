@@ -42,7 +42,6 @@ worker 的上下文每增长 3%，系统就自动从 worker 的上下文中 fork
 - `docs/feature-decisions.md`：产品功能决策
 - `docs/draft-plans`：我自己写的初步计划
 - `docs/plans`：AI 基于初步计划制定的计划
-- `docs/code_explanations`：让 AI 给我解释的一些代码，对其他人应该没啥用。用 [structured-knowledge](https://github.com/jenglong1899/structured-knowledge) skill 制作。
 
 你可能需要把 `AGENTS.md` 中的 `# 用户开发环境` 一节给删掉。
 
