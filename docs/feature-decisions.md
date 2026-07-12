@@ -1,6 +1,6 @@
 # async memory manager and keep last n msg
 
-keep-last-n有个问题：如果keep-last-n对应的内容正好很大，那么等会触发检查的时候，judge就会认为当前上下文中有50%以上的内容都是不重要的，然后又触发重置
+keep-last-n有个问题：如果keep-last-n对应的内容正好很大，那么等会触发检查的时候，decider就会认为当前上下文中有50%以上的内容都是不重要的，然后又触发重置
 
 可能的解决办法1：弄一个保护期？重置后，跳过3个阈值
 
@@ -11,7 +11,7 @@ keep-last-n有个问题：如果keep-last-n对应的内容正好很大，那么�
 （一些消息）
 <wake-memory-manager-flag>
 （worker继续运行）
-（此时summarizer完成摘要任务，judge决定重置上下文。现在这个点，到上一个flag，这中间的内容是没有被摘要的）
+（此时summarizer完成摘要任务，decider决定重置上下文。现在这个点，到上一个flag，这中间的内容是没有被摘要的）
 ```
 所以得keep last n msg，来保证这部分没做摘要的不被丢掉
 
@@ -19,7 +19,7 @@ keep-last-n有个问题：如果keep-last-n对应的内容正好很大，那么�
 如果这中间的msg不是很大，那么就keep这中间的msg，放到新的上下文中
 如果很大的话，就要做摘要。
 
-那如果用户刚发了一大堆消息，内容很大，然后紧跟不久，judge决定重置上下文，那么你这个摘要可能就麻烦了，因为这些用户发的这东西根本没有没法被摘要，可能真的很有价值。
+那如果用户刚发了一大堆消息，内容很大，然后紧跟不久，decider决定重置上下文，那么你这个摘要可能就麻烦了，因为这些用户发的这东西根本没有没法被摘要，可能真的很有价值。
 这种情况出现的可能比较少，也可以不去考虑。
 
 那你可以说 keep last n 那个抖动出现的可能也比较小。这么说确实是对的，但是keep last n感觉确实是可以优化掉的。
@@ -36,21 +36,21 @@ Worker 自己也维护了一个 todo。
 
 所以问题解决方案其实是，当决定重置后，worker要暂停，然后这时候再次触发一次 summarizer。
 
-## 先开始judge，然后再summarizer？
+## 先开始decider，然后再summarizer？
 
-上面的做法的问题可能是：summarizer刚做完没多久，然后judge决定重置，然后summarizer又要被唤醒一次，这就好像有点浪费
-要不要先唤起judge（不留flag），然后等5秒，然后唤起summarizer（留flag）
+上面的做法的问题可能是：summarizer刚做完没多久，然后decider决定重置，然后summarizer又要被唤醒一次，这就好像有点浪费
+要不要先唤起decider（不留flag），然后等5秒，然后唤起summarizer（留flag）
 把这个 flag 改名一下，得改成 WAKE_MM_SUMMARY_FLAG ，这样才符合实际。
 不过可能也没有必要先做这个了，这个功能有最好，但没有也可以？
 
 ## 方法2
 决定重置后，worker要暂停，但是不要再触发一次summarizer，而是把上次summarizer触发的位置和当前这个位置的内容保留下来，在下一次重置后加载。
-judge判断重置应该不会需要很久，可能5-10秒左右，这个时间段内，worker的上下文大概率不会增长太多，这个时候触发summarizer会有点浪费。
+decider判断重置应该不会需要很久，可能5-10秒左右，这个时间段内，worker的上下文大概率不会增长太多，这个时候触发summarizer会有点浪费。
 
 # memory manager的prompt太长了？
 好歹还是利用了缓存的，比 Hermes 那种压缩好多了。
 
-# todo 更加智能的summarizer和judge触发？
+# todo 更加智能的summarizer和decider触发？
 
 比如在翻译书的时候，能不能让 AI 在自己开始工作前去给自己设置提醒，当自己翻译完一个章节的时候，系统就去触发一次。
 好像可以用代码的方式去做
