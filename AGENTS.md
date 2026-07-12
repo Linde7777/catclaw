@@ -155,6 +155,7 @@
 ## 文档说明
 - `docs/draft-plans/`：早期草案/想法，内容不保证与当前实现一致
 - `docs/plans/`：实施时写下的更稳定计划文档（通常与当前实现更一致，但仍以代码为准）
+- Multi Agent 的既定设计与分阶段实施边界见 `docs/plans/2026-07-12-multiagent-orchestrator.md`：以 session 级 `AgentOrchestrator` 管理临时 subagent，复用带 `agentId` 的聊天事件与时间线 UI，summarizer/decider 保留专用 runner。
 - `docs/code_explanations/`：教学/讲义（例如 `teach_backend_asyncio_basics.md`、`teach_frontend_store_basics.md`）
 - TODO.md 和 README.md 你不需要去阅读，通常这只会分散你的注意力。
 
