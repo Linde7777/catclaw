@@ -42,7 +42,7 @@ class AgentRunner:
 
     def start(self) -> None:
         """
-        初始化对话状态（必须先调用，否则 agent.run 可能因为 conversation_store 未初始化而报错）。
+        恢复最近的会话；没有历史记录时初始化一个新会话。
 
         约束：
         - runner 忙（task 正在跑）时不允许切换会话。

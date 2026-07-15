@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-from src.conversation_store import ConversationStore
+from src.conversation_repository import ConversationRepository
 from src.core.agent import Agent
 from src.core.agent_turn import Tool, TurnResult, TurnUsage, execute_tool_calls
 from src.core.model_config import ModelConfig
@@ -115,13 +115,11 @@ def _turn_result(message: dict[str, object], *, prompt_tokens: int | None = None
 
 
 @contextmanager
-def _patch_agent_conversation_store_without_history(temp_dir: str) -> Iterator[None]:
-    with mock.patch("src.core.agent.ConversationStore") as store_cls:
-        store_cls.find_latest_conversation_file_name.return_value = None
-        store_cls.side_effect = lambda *, init_messages: ConversationStore(
-            init_messages=init_messages,
-            originals_dir=Path(temp_dir),
-        )
+def _patch_agent_conversation_repository_without_history(temp_dir: str) -> Iterator[None]:
+    with mock.patch(
+        "src.core.agent.ConversationRepository",
+        return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+    ):
         yield
 
 
@@ -146,7 +144,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         enqueued_ids: list[str] = []
         committed_ids: list[str] = []
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -169,7 +167,32 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(enqueued_ids, ["frontend-1"])
         self.assertEqual(committed_ids, ["frontend-1"])
-        self.assertEqual(agent._messages[-1], {"role": "user", "content": "world"})
+        self.assertEqual(agent._conversation.messages[-1], {"role": "user", "content": "world"})
+
+    async def test_memory_manager_wake_persists_combined_state_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repository = ConversationRepository(originals_dir=Path(temp_dir))
+            agent = Agent(
+                name="demo",
+                model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
+                init_messages=[{"role": "user", "content": "instruction"}],
+                tools=[],
+                conversation_repository=repository,
+            )
+            agent.start_conversation()
+            agent.enqueue_user_message(frontend_msg_id="frontend-1", user_message="world")
+            agent._safe_drain_user_message_queue()
+            agent._summarizer_runner.run = mock.AsyncMock(return_value=None)  # type: ignore[method-assign]
+            agent._decider_runner.run = mock.AsyncMock(return_value=False)  # type: ignore[method-assign]
+
+            with mock.patch.object(repository, "persist", wraps=repository.persist) as persist:
+                await agent._maybe_wake_memory_manager(prompt_tokens=10_000)
+
+            self.assertEqual(persist.call_count, 1)
+            self.assertEqual(agent._conversation.summarizer_awaken_count, 1)
+            self.assertEqual(agent._conversation.decider_awaken_count, 1)
+            await agent._summarizer_task
+            await agent._decider_task
 
     async def test_execute_tool_calls_emits_tool_result(self) -> None:
         tool_results: list[dict[str, object]] = []
@@ -353,7 +376,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
     async def test_run_passes_on_tool_result_through_agent(self) -> None:
         tool_results: list[dict[str, object]] = []
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -407,24 +430,22 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tool_results[0]["tool_call_id"], "call_1")
         self.assertEqual(tool_results[0]["result_json_str"], "{\"echoed\": 7}")
         self.assertEqual(
-            agent._messages[-1],
+            agent._conversation.messages[-1],
             {
                 "role": "assistant",
                 "content": "done",
             },
         )
-        self.assertIsInstance(stored_payload["meta"], dict)
-        self.assertNotIn("display-name", stored_payload["meta"])
         self.assertEqual(
             [message["role"] for message in stored_payload["messages"]],
-            ["user", "user", "assistant", "tool", "assistant"],
+            ["user", "assistant", "tool", "assistant"],
         )
-        self.assertEqual(stored_payload["messages"][3]["content"], "{\"echoed\": 7}")
+        self.assertEqual(stored_payload["messages"][2]["content"], "{\"echoed\": 7}")
         self.assertTrue(all("meta" not in message for message in stored_payload["messages"]))
 
     async def test_append_runtime_message_requires_persisted_conversation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -438,7 +459,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_run_requires_first_user_message(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -466,7 +487,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         decider_runner = _SequenceDeciderRunner([True, False])
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -517,16 +538,16 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(summarizer_runner.calls), 1)
         self.assertEqual(len(decider_runner.calls), 1)
         self.assertEqual(switch_events[-1], [{"role": "assistant", "content": "done after reset"}])
-        self.assertEqual(agent._messages[0], {"role": "user", "content": "user-2"})
-        self.assertEqual(agent._summarizer_awaken_count, 0)
-        self.assertEqual(agent._decider_awaken_count, 0)
+        self.assertEqual(agent._conversation.init_messages[0], {"role": "user", "content": "user-2"})
+        self.assertEqual(agent._conversation.summarizer_awaken_count, 0)
+        self.assertEqual(agent._conversation.decider_awaken_count, 0)
 
     async def test_memory_manager_does_not_awaken_below_context_growth_threshold(self) -> None:
         summarizer_runner = _StaticSummarizerRunner()
         decider_runner = _StaticDeciderRunner(should_reset_context=False)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -539,25 +560,24 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
 
                 agent.enqueue_user_message(frontend_msg_id="u1", user_message="hello")
                 agent._safe_drain_user_message_queue()
-                store = agent._require_conversation_store()
                 # 当前 tokens=2（init message + 首条用户消息），used_percent=2，
                 # current_threshold=0；将 last_triggered_threshold 设为 0，确保不会被唤醒。
-                store.update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
+                agent._conversation.last_triggered_threshold = 0
 
                 with mock.patch("src.core.agent.get_model_context_window_tokens", return_value=100):
                     await agent._maybe_wake_memory_manager(prompt_tokens=2)
 
         self.assertEqual(summarizer_runner.calls, [])
         self.assertEqual(decider_runner.calls, [])
-        self.assertEqual(agent._summarizer_awaken_count, 0)
-        self.assertEqual(agent._decider_awaken_count, 0)
+        self.assertEqual(agent._conversation.summarizer_awaken_count, 0)
+        self.assertEqual(agent._conversation.decider_awaken_count, 0)
 
     async def test_memory_manager_awakes_when_context_growth_threshold_is_reached(self) -> None:
         summarizer_runner = _StaticSummarizerRunner()
         decider_runner = _StaticDeciderRunner(should_reset_context=False)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -610,8 +630,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
             [tool.name for tool in decider_runner.calls[0]["tools"]],
             ["bash", "read_file", "replace_text", "insert_text"],
         )
-        self.assertEqual(agent._summarizer_awaken_count, 1)
-        self.assertEqual(agent._decider_awaken_count, 1)
+        self.assertEqual(agent._conversation.summarizer_awaken_count, 1)
+        self.assertEqual(agent._conversation.decider_awaken_count, 1)
 
     async def test_decider_reset_waits_for_summarizer_before_switching_conversation(self) -> None:
         switch_events: list[list[dict[str, object]]] = []
@@ -619,7 +639,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         decider_runner = _SequenceDeciderRunner([True, False])
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -675,14 +695,14 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(decider_runner.calls), 1)
         self.assertEqual(len(switch_events), 2)
         self.assertEqual(switch_events[1], [{"role": "assistant", "content": "done"}])
-        self.assertEqual(agent._messages[0], {"role": "user", "content": "user-2"})
+        self.assertEqual(agent._conversation.init_messages[0], {"role": "user", "content": "user-2"})
 
     async def test_summarizer_does_not_reenter_while_in_flight(self) -> None:
         summarizer_runner = _BlockingSummarizerRunner()
         decider_runner = _StaticDeciderRunner(should_reset_context=False)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -730,14 +750,14 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, final_ai_msg)
         self.assertEqual(len(summarizer_runner.calls), 1)
         self.assertEqual(len(decider_runner.calls), 1)
-        self.assertEqual(agent._summarizer_awaken_count, 1)
-        self.assertEqual(agent._decider_awaken_count, 1)
-        self.assertEqual(agent._conversation_store.memory_manager_last_summarized_msg_idx, 2)  # type: ignore[union-attr]
-        self.assertEqual(agent._conversation_store.memory_manager_last_summarized_signature, '{"echoed": 1}')  # type: ignore[union-attr]
+        self.assertEqual(agent._conversation.summarizer_awaken_count, 1)
+        self.assertEqual(agent._conversation.decider_awaken_count, 1)
+        self.assertEqual(agent._conversation.last_summarized_msg_idx, 2)
+        self.assertEqual(agent._conversation.last_summarized_signature, '{"echoed": 1}')
 
     async def test_reset_carryover_uses_last_summarized_msg_idx_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -749,10 +769,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 agent._safe_drain_user_message_queue()
                 agent._append_runtime_message({"role": "assistant", "content": "before-boundary"})
                 agent._append_runtime_message({"role": "assistant", "content": "after-boundary"})
-                agent._require_conversation_store().update_memory_manager_last_summarized_boundary(
-                    msg_idx=1,
-                    signature="before......dary",
-                )
+                agent._conversation.last_summarized_msg_idx = 1
+                agent._conversation.last_summarized_signature = "before......dary"
                 self.assertEqual(
                     agent._build_reset_carryover_messages(),
                     [{"role": "assistant", "content": "after-boundary"}],
@@ -760,7 +778,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_second_summarizer_wakeup_uses_previous_boundary_signature(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with _patch_agent_conversation_store_without_history(temp_dir):
+            with _patch_agent_conversation_repository_without_history(temp_dir):
                 agent = Agent(
                     name="demo",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -781,11 +799,9 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                     await agent._maybe_wake_memory_manager(prompt_tokens=3)
                     await _wait_for_memory_manager_background_tasks(agent)
 
-                    first_boundary_signature = agent._require_conversation_store().memory_manager_last_summarized_signature
+                    first_boundary_signature = agent._conversation.last_summarized_signature
 
-                    agent._require_conversation_store().update_memory_manager_last_triggered_threshold(
-                        last_triggered_threshold=0,
-                    )
+                    agent._conversation.last_triggered_threshold = 0
                     agent._append_runtime_message({"role": "assistant", "content": "second-boundary"})
 
                     await agent._maybe_wake_memory_manager(prompt_tokens=3)
@@ -798,7 +814,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                     first_boundary_signature,
                 )
                 self.assertEqual(
-                    agent._require_conversation_store().memory_manager_last_summarized_signature,
+                    agent._conversation.last_summarized_signature,
                     "second-boundary",
                 )
 

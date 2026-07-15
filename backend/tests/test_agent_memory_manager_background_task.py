@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from src.conversation_repository import ConversationRepository
 from src.core.agent import Agent
-from src.conversation_store import ConversationStore
 from src.core.agent_turn import TurnUsage
 from src.core.model_config import ModelConfig
 
@@ -35,12 +35,10 @@ class _DelayedDeciderRunner:
 class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
     async def test_summarizer_task_exception_is_observed_and_logged(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("src.core.agent.ConversationStore") as store_cls:
-                store_cls.find_latest_conversation_file_name.return_value = None
-                store_cls.side_effect = lambda *, init_messages: ConversationStore(
-                    init_messages=init_messages,
-                    originals_dir=Path(temp_dir),
-                )
+            with mock.patch(
+                "src.core.agent.ConversationRepository",
+                return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+            ):
                 agent = Agent(
                     name="demo-agent",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -50,7 +48,7 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                 agent.start_conversation()
                 agent.enqueue_user_message(frontend_msg_id="1", user_message="hi")
                 agent._safe_drain_user_message_queue()
-                agent._require_conversation_store().update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
+                agent._conversation.last_triggered_threshold = 0
 
                 agent._summarizer_runner.run = mock.AsyncMock(side_effect=RuntimeError("boom"))  # type: ignore[method-assign]
                 agent._decider_runner.run = mock.AsyncMock(return_value=False)  # type: ignore[method-assign]
@@ -66,9 +64,10 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_maybe_wake_memory_manager_does_not_wait_for_summarizer_or_decider(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("src.core.agent.ConversationStore") as store_cls:
-                store_cls.find_latest_conversation_file_name.return_value = None
-                store_cls.side_effect = lambda *, init_messages: ConversationStore(init_messages=init_messages, originals_dir=Path(temp_dir))
+            with mock.patch(
+                "src.core.agent.ConversationRepository",
+                return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+            ):
                 agent = Agent(
                     name="demo-agent",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -78,7 +77,7 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                 agent.start_conversation()
                 agent.enqueue_user_message(frontend_msg_id="1", user_message="hi")
                 agent._safe_drain_user_message_queue()
-                agent._require_conversation_store().update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
+                agent._conversation.last_triggered_threshold = 0
 
                 summarizer_runner = _BlockingSummarizerRunner()
                 decider_runner = _DelayedDeciderRunner(should_reset_context=False)
@@ -103,9 +102,10 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
         reset_observations: list[bool] = []
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("src.core.agent.ConversationStore") as store_cls:
-                store_cls.find_latest_conversation_file_name.return_value = None
-                store_cls.side_effect = lambda *, init_messages: ConversationStore(init_messages=init_messages, originals_dir=Path(temp_dir))
+            with mock.patch(
+                "src.core.agent.ConversationRepository",
+                return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+            ):
                 agent = Agent(
                     name="demo-agent",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -116,7 +116,7 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                 agent.start_conversation()
                 agent.enqueue_user_message(frontend_msg_id="1", user_message="hi")
                 agent._safe_drain_user_message_queue()
-                agent._require_conversation_store().update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
+                agent._conversation.last_triggered_threshold = 0
 
                 decider_runner = _DelayedDeciderRunner(should_reset_context=True)
                 agent._summarizer_runner.run = mock.AsyncMock(return_value=None)  # type: ignore[method-assign]
@@ -138,9 +138,10 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_delayed_decider_reset_waits_for_summarizer_when_worker_is_idle(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("src.core.agent.ConversationStore") as store_cls:
-                store_cls.find_latest_conversation_file_name.return_value = None
-                store_cls.side_effect = lambda *, init_messages: ConversationStore(init_messages=init_messages, originals_dir=Path(temp_dir))
+            with mock.patch(
+                "src.core.agent.ConversationRepository",
+                return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+            ):
                 agent = Agent(
                     name="demo-agent",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -150,7 +151,7 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                 agent.start_conversation()
                 agent.enqueue_user_message(frontend_msg_id="1", user_message="hi")
                 agent._safe_drain_user_message_queue()
-                agent._require_conversation_store().update_memory_manager_last_triggered_threshold(last_triggered_threshold=0)
+                agent._conversation.last_triggered_threshold = 0
 
                 summarizer_runner = _BlockingSummarizerRunner()
                 decider_runner = _DelayedDeciderRunner(should_reset_context=True)
@@ -175,9 +176,10 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_reset_carryover_keeps_messages_after_last_summarized_msg_idx(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("src.core.agent.ConversationStore") as store_cls:
-                store_cls.find_latest_conversation_file_name.return_value = None
-                store_cls.side_effect = lambda *, init_messages: ConversationStore(init_messages=init_messages, originals_dir=Path(temp_dir))
+            with mock.patch(
+                "src.core.agent.ConversationRepository",
+                return_value=ConversationRepository(originals_dir=Path(temp_dir)),
+            ):
                 agent = Agent(
                     name="demo-agent",
                     model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
@@ -189,10 +191,8 @@ class AgentMemoryManagerBackgroundTaskTests(unittest.IsolatedAsyncioTestCase):
                 agent._safe_drain_user_message_queue()
                 agent._append_runtime_message({"role": "assistant", "content": "after-boundary"})
                 agent._append_runtime_message({"role": "tool", "tool_call_id": "call_1", "content": "tool-result"})
-                agent._require_conversation_store().update_memory_manager_last_summarized_boundary(
-                    msg_idx=0,
-                    signature="before......dary",
-                )
+                agent._conversation.last_summarized_msg_idx = 0
+                agent._conversation.last_summarized_signature = "before......dary"
 
                 carryover_messages = agent._build_reset_carryover_messages()
 
