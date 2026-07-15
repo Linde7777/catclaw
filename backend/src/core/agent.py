@@ -161,7 +161,7 @@ class Agent(AgentBase):
                 self._conversation.paused,
                 self._conversation.pause_requested,
             )
-            self.resume()
+            self.clear_pause()
         self._user_msg_queue.append(QueuedUserMessage(frontend_msg_id, user_message))
         logger.info(
             "Agent[%s].enqueue_user_message：已入队（frontend_msg_id=%s queue=%s user_len=%s）",
@@ -180,15 +180,15 @@ class Agent(AgentBase):
         logger.info("Agent[%s].request_pause：pause_requested=true", self.name)
         self._on_pause_requested()
 
-    # todo 这命名好像会让人认为 resume 也会负责运行，其实不是，应该被命名成 set resume?
-    def resume(self) -> None:
+    def clear_pause(self) -> None:
+        """解除 pause gate；是否继续运行由 AgentRunner 决定。"""
         was_paused = self._conversation.paused
         was_pause_requested = self._conversation.pause_requested
         self._conversation.pause_requested = False
         self._conversation.paused = False
         self._persist_if_started()
         if was_paused or was_pause_requested:
-            logger.info("Agent[%s].resume：已恢复（was_paused=%s was_pause_requested=%s）", self.name, was_paused,
+            logger.info("Agent[%s].clear_pause：已解除暂停（was_paused=%s was_pause_requested=%s）", self.name, was_paused,
                         was_pause_requested)
             self._on_resumed()
 
@@ -201,7 +201,7 @@ class Agent(AgentBase):
     def drive_decision(self) -> DriveDecision:
         backlog_reason = self._backlog_reason()
 
-        # paused 是一个硬边界：一旦进入 paused，runner 必须停下，等待显式 resume。
+        # paused 是一个硬边界：一旦进入 paused，runner 必须停下，等待显式解除暂停。
         if self._conversation.paused:
             if backlog_reason is None:
                 return DriveDecision(should_drive=False, reason=DriveReason.paused_no_backlog)

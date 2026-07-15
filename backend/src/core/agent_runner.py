@@ -72,7 +72,7 @@ class AgentRunner:
 
     def resume(self) -> None:
         logger.info("AgentRunner.resume：收到恢复请求（agent=%s）", getattr(self._agent, "name", "<unknown>"))
-        self._agent.resume()
+        self._agent.clear_pause()
         # resume 的语义是“解除暂停并尽可能继续推进状态机”。
         # 是否需要调度 run() 由 agent.drive_decision() 统一决定。
         self._ensure_running()

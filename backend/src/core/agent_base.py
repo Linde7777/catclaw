@@ -34,7 +34,7 @@ class AgentBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def resume(self) -> None:
+    def clear_pause(self) -> None:
         raise NotImplementedError
 
     @abstractmethod

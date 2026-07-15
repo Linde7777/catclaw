@@ -28,7 +28,7 @@ class _FakeAgentPausedToolTurn(AgentBase):
     def request_pause(self) -> None:
         self._pause_requested = True
 
-    def resume(self) -> None:
+    def clear_pause(self) -> None:
         self._pause_requested = False
         self._paused = False
 
@@ -88,7 +88,7 @@ class _FakeAgentPauseWithQueuedMessages(AgentBase):
     def request_pause(self) -> None:
         self._pause_requested = True
 
-    def resume(self) -> None:
+    def clear_pause(self) -> None:
         self._pause_requested = False
         self._paused = False
 
