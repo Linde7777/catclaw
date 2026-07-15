@@ -409,9 +409,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                     "content": "done",
                 }
 
-                with mock.patch.object(
-                    Agent,
-                    "_safe_stream",
+                with mock.patch(
+                    "src.core.agent.stream",
                     new=mock.AsyncMock(
                         side_effect=[
                             _turn_result(ai_msg_with_tool_call, prompt_tokens=10_000),
@@ -443,6 +442,54 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stored_payload["messages"][2]["content"], "{\"echoed\": 7}")
         self.assertTrue(all("meta" not in message for message in stored_payload["messages"]))
 
+    async def test_run_resumes_persisted_tool_call_without_streaming_it_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with _patch_agent_conversation_repository_without_history(temp_dir):
+                agent = Agent(
+                    name="demo",
+                    model_config=ModelConfig(model="demo", base_url="https://example.com", api_key="key"),
+                    init_messages=[{"role": "user", "content": "hello"}],
+                    tools=[self._echo_tool()],
+                )
+                agent.start_conversation()
+                agent.enqueue_user_message(frontend_msg_id="frontend-1", user_message="run tool")
+                agent._safe_drain_user_message_queue()
+                agent._append_runtime_message(
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "echo",
+                                    "arguments": json.dumps({"value": 7}),
+                                },
+                            }
+                        ],
+                    }
+                )
+
+                final_ai_msg = {"role": "assistant", "content": "done"}
+                stream_mock = mock.AsyncMock(return_value=_turn_result(final_ai_msg, prompt_tokens=10_000))
+                with mock.patch("src.core.agent.stream", new=stream_mock), mock.patch.object(
+                    Agent,
+                    "_maybe_wake_memory_manager",
+                    new=mock.AsyncMock(),
+                ):
+                    result = await agent.run()
+
+                stored_file = next(Path(temp_dir).glob("*.json"))
+                stored_payload = json.loads(stored_file.read_text(encoding="utf-8"))
+
+        self.assertEqual(result, final_ai_msg)
+        self.assertEqual(stream_mock.await_count, 1)
+        self.assertEqual(
+            [message["role"] for message in stored_payload["messages"]],
+            ["user", "assistant", "tool", "assistant"],
+        )
+
     async def test_append_runtime_message_requires_persisted_conversation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             with _patch_agent_conversation_repository_without_history(temp_dir):
@@ -468,7 +515,7 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 )
                 agent.start_conversation()
 
-                with mock.patch.object(Agent, "_safe_stream", new=mock.AsyncMock(side_effect=AssertionError("不应调用 _safe_stream"))):
+                with mock.patch("src.core.agent.stream", new=mock.AsyncMock(side_effect=AssertionError("不应调用 stream"))):
                     with self.assertRaisesRegex(RuntimeError, "尚未开始"):
                         await agent.run()
 
@@ -512,9 +559,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 }
                 final_ai_msg = {"role": "assistant", "content": "done after reset"}
 
-                with mock.patch.object(
-                    Agent,
-                    "_safe_stream",
+                with mock.patch(
+                    "src.core.agent.stream",
                     new=mock.AsyncMock(
                         side_effect=[
                             _turn_result(ai_msg_with_tool_call, prompt_tokens=10_000),
@@ -603,9 +649,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 ]
                 final_ai_msg = {"role": "assistant", "content": "done"}
 
-                with mock.patch.object(
-                    Agent,
-                    "_safe_stream",
+                with mock.patch(
+                    "src.core.agent.stream",
                     new=mock.AsyncMock(
                         side_effect=[
                             _turn_result(ai_msgs_with_tool_call[0], prompt_tokens=10),
@@ -664,9 +709,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 }
                 final_ai_msg = {"role": "assistant", "content": "done"}
 
-                with mock.patch.object(
-                    Agent,
-                    "_safe_stream",
+                with mock.patch(
+                    "src.core.agent.stream",
                     new=mock.AsyncMock(
                         side_effect=[
                             _turn_result(ai_msg_with_tool_call, prompt_tokens=10_000),
@@ -729,9 +773,8 @@ class AgentCallbackTests(unittest.IsolatedAsyncioTestCase):
                 ]
                 final_ai_msg = {"role": "assistant", "content": "done"}
 
-                with mock.patch.object(
-                    Agent,
-                    "_safe_stream",
+                with mock.patch(
+                    "src.core.agent.stream",
                     new=mock.AsyncMock(
                         side_effect=[
                             _turn_result(ai_msgs_with_tool_call[0], prompt_tokens=10_000),

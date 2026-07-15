@@ -538,33 +538,6 @@ class Agent(AgentBase):
         self._conversation.messages.append(message)
         self._conversation_repository.persist(self._conversation)
 
-    @staticmethod
-    async def _safe_stream(*, model_config: ModelConfig,
-                           messages: list[dict[str, Any]],
-                           tools: list[Tool],
-                           on_ai_content_delta: OnAiContentDelta,
-                           on_ai_reasoning_delta: OnAiReasoningDelta,
-                           on_ai_tool_call_started: OnAiToolCallStarted,
-                           on_ai_tool_call_arguments_delta: OnAiToolCallArgumentsDelta,
-                           on_ai_tool_call_finished: OnAiToolCallFinished) -> TurnResult:
-        """
-        :return: 单轮模型结果
-        """
-        # 如果 Agent 之前正在运行，然后结果突然被中断了，
-        # 那就可能导致 message 数组最后一个可能是 AI message with tool call，
-        # 这种情况下就应该再续上之前的对话，不应该再调用 stream 以获得 AI message 了
-        if messages[-1] is not None and messages[-1].get("role") == "assistant" and messages[-1].get("tool_calls"):
-            return TurnResult(assistant_message=messages[-1], usage=TurnUsage())
-
-        # 最后一条消息是user message
-        return await stream(model_config=model_config, messages=messages,
-                            tools=tools,
-                            on_ai_content_delta=on_ai_content_delta,
-                            on_ai_reasoning_delta=on_ai_reasoning_delta,
-                            on_ai_tool_call_started=on_ai_tool_call_started,
-                            on_ai_tool_call_arguments_delta=on_ai_tool_call_arguments_delta,
-                            on_ai_tool_call_finished=on_ai_tool_call_finished)
-
     def _reset_context(self, *, carryover_messages: list[dict[str, Any]]) -> None:
         from src.core.init_prompts import (
             build_init_messages,
@@ -589,29 +562,34 @@ class Agent(AgentBase):
         try:
             while True:
                 model_messages = self._conversation.build_model_messages()
-                logger.info(
-                    "Agent[%s].run：开始模型调用（messages=%s tools=%s paused=%s pause_requested=%s）",
-                    self.name,
-                    len(model_messages),
-                    len(self._tools),
-                    self._conversation.paused,
-                    self._conversation.pause_requested,
-                )
-                turn_result = await self._safe_stream(model_config=self._model_config,
-                                                      messages=model_messages,
-                                                      tools=self._tools,
-                                                      on_ai_content_delta=self._on_ai_content_delta,
-                                                      on_ai_reasoning_delta=self._on_ai_reasoning_delta,
-                                                      on_ai_tool_call_started=self._on_ai_tool_call_started,
-                                                      on_ai_tool_call_arguments_delta=self._on_ai_tool_call_arguments_delta,
-                                                      on_ai_tool_call_finished=self._on_ai_tool_call_finished,
-                                                      )
+                last_message = self._conversation.messages[-1]
+                if last_message.get("role") == "assistant" and last_message.get("tool_calls"):
+                    # assistant tool call 已经持久化，说明上次运行在执行工具前中断了。
+                    # 直接从工具阶段继续，避免再次调用模型或重复追加 assistant 消息。
+                    logger.info("Agent[%s].run：恢复未执行的 tool_calls", self.name)
+                    turn_result = TurnResult(assistant_message=last_message, usage=TurnUsage())
+                else:
+                    logger.info(
+                        "Agent[%s].run：开始模型调用（messages=%s tools=%s paused=%s pause_requested=%s）",
+                        self.name,
+                        len(model_messages),
+                        len(self._tools),
+                        self._conversation.paused,
+                        self._conversation.pause_requested,
+                    )
+                    turn_result = await stream(
+                        model_config=self._model_config,
+                        messages=model_messages,
+                        tools=self._tools,
+                        on_ai_content_delta=self._on_ai_content_delta,
+                        on_ai_reasoning_delta=self._on_ai_reasoning_delta,
+                        on_ai_tool_call_started=self._on_ai_tool_call_started,
+                        on_ai_tool_call_arguments_delta=self._on_ai_tool_call_arguments_delta,
+                        on_ai_tool_call_finished=self._on_ai_tool_call_finished,
+                    )
+                    self._append_runtime_message(turn_result.assistant_message)
+                    
                 ai_msg_dict = turn_result.assistant_message
-                # 这个判断条件对应 _safe_stream 中的：“agent被突然中断
-                # 导致 message 数组最后一个可能是 AI message with tool call”
-                # todo 这个_safe_stream应该能设计得更好一点？比如改成 _safe_steam_and_append?
-                if ai_msg_dict is not model_messages[-1]:
-                    self._append_runtime_message(ai_msg_dict)
                 if not ai_msg_dict.get("tool_calls"):
                     # 即使本轮没有工具调用，也需要按上下文阈值唤醒 memory manager，
                     # 否则“纯聊天”场景永远不会触发摘要/重置判断。
