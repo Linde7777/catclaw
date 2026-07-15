@@ -120,22 +120,15 @@ class Agent(AgentBase):
         conversation = self._conversation_repository.load_latest()
         if conversation is None:
             logger.info("Agent[%s].start_conversation：创建新会话", self.name)
-            self._start_new_conversation_segment()
+            self._conversation = ConversationState(
+                init_messages=[message.copy() for message in self._conversation.init_messages],
+            )
+            self._notify_switch_conversation()
+            self._on_resumed()
             return
 
         logger.info("Agent[%s].start_conversation：恢复历史会话（file=%s）", self.name, conversation.file_name)
-        self._load_conversation(conversation=conversation)
-
-    def _start_new_conversation_segment(self) -> None:
-        self._conversation = ConversationState(
-            init_messages=[message.copy() for message in self._conversation.init_messages],
-        )
-        self._notify_switch_conversation()
-        self._on_resumed()
-
-    def _load_conversation(self, *, conversation: ConversationState) -> None:
         if self._user_msg_queue:
-            # todo 这里不应该 raise error，只是应该报个错而已，不应该整个就停掉。
             raise RuntimeError("加载 conversation 文件之前不能有排队中的 user message")
 
         self._conversation = conversation
