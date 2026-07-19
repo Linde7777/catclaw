@@ -7,7 +7,9 @@ from typing import Any, Protocol
 from uuid import uuid4
 
 from src.core.agent import Agent, OnPaused, OnPauseRequested, OnQueuedUserMsgCommitted, OnResumed, OnSwitchConversation
+from src.core.agent_activity import EventEmitter
 from src.core.agent_runner import AgentRunner
+from src.core.agent_team import AgentTeam
 from src.core.agent_turn import (
     OnAiContentDelta,
     OnAiReasoningDelta,
@@ -112,7 +114,7 @@ def create_default_agent(*, callbacks: AgentCallbacks) -> Agent:
     )
 
 
-class AgentRunnerFactory(Protocol):
+class AgentTeamFactory(Protocol):
     def __call__(
         self,
         *,
@@ -122,10 +124,11 @@ class AgentRunnerFactory(Protocol):
         on_agent_turn_completed: Callable[[], None],
         on_agent_became_idle: Callable[[], None],
         on_error: Callable[[Exception], None],
-    ) -> AgentRunner: ...
+        emit_activity_event: EventEmitter,
+    ) -> AgentTeam: ...
 
 
-def create_agent_runner(
+def create_agent_team(
     *,
     callbacks: AgentCallbacks,
     is_closed: Callable[[], bool],
@@ -133,11 +136,12 @@ def create_agent_runner(
     on_agent_turn_completed: Callable[[], None],
     on_agent_became_idle: Callable[[], None],
     on_error: Callable[[Exception], None],
-) -> AgentRunner:
+    emit_activity_event: EventEmitter,
+) -> AgentTeam:
     # 产品形态上不再暴露“会话列表/切换/显式恢复某个会话文件”给前端：
     # WebSocket 连接建立时永远走“自动恢复最近的 conversation segment”，
     # 如果本地还没有任何对话文件，则退化为 new_conversation。
-    runner = AgentRunner(
+    main_runner = AgentRunner(
         agent=create_default_agent(callbacks=callbacks),
         is_closed=is_closed,
         on_agent_became_busy=on_agent_became_busy,
@@ -145,8 +149,7 @@ def create_agent_runner(
         on_agent_became_idle=on_agent_became_idle,
         on_error=on_error,
     )
-    runner.start()
-    return runner
+    return AgentTeam(main_runner=main_runner, emit_activity_event=emit_activity_event)
 
 
 @dataclass
@@ -356,11 +359,11 @@ class WebSocketChatSession:
     def __init__(
         self,
         *,
-        agent_runner_factory: AgentRunnerFactory | None = None,
+        agent_team_factory: AgentTeamFactory | None = None,
     ) -> None:
         """
-        WebSocket 连接的会话编排器：桥接 AgentRunner(agent_runner.py) 和 WebSocket。
-        :param agent_runner_factory: 用于测试注入
+        WebSocket 连接的会话编排器：桥接 AgentTeam 和 WebSocket。
+        :param agent_team_factory: 用于测试注入
         """
         self._outgoing_queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._closed = False
@@ -380,24 +383,27 @@ class WebSocketChatSession:
             on_paused=self._projector.on_paused,
             on_resumed=self._projector.on_resumed,
         )
-        if agent_runner_factory is None:
-            self._agent_runner = create_agent_runner(
+        if agent_team_factory is None:
+            self._agent_team = create_agent_team(
                 callbacks=callbacks,
                 is_closed=lambda: self._closed,
                 on_agent_became_busy=self._projector.on_agent_became_busy,
                 on_agent_turn_completed=self._projector.on_agent_turn_completed,
                 on_agent_became_idle=self._projector.on_agent_became_idle,
-                on_error=self._on_agent_runner_error,
+                on_error=self._on_agent_team_error,
+                emit_activity_event=self._emit_sync,
             )
         else:
-            self._agent_runner = agent_runner_factory(
+            self._agent_team = agent_team_factory(
                 callbacks=callbacks,
                 is_closed=lambda: self._closed,
                 on_agent_became_busy=self._projector.on_agent_became_busy,
                 on_agent_turn_completed=self._projector.on_agent_turn_completed,
                 on_agent_became_idle=self._projector.on_agent_became_idle,
-                on_error=self._on_agent_runner_error,
+                on_error=self._on_agent_team_error,
+                emit_activity_event=self._emit_sync,
             )
+        self._agent_team.start()
 
     async def next_event(self) -> dict[str, Any] | None:
         return await self._outgoing_queue.get()
@@ -414,9 +420,9 @@ class WebSocketChatSession:
         )
         self._pending_user_contents[user_message_id] = content
 
-        self._agent_runner.submit_user_message(
-            frontend_msg_id=user_message_id,
-            user_message=content,
+        self._agent_team.submit_main_user_message(
+            message_id=user_message_id,
+            content=content,
         )
 
     async def submit_pause_request(self) -> None:
@@ -424,14 +430,14 @@ class WebSocketChatSession:
             raise RuntimeError("session 已关闭")
 
         logger.info("WebSocketChatSession.submit_pause_request：收到暂停请求（closed=%s）", self._closed)
-        self._agent_runner.request_pause()
+        self._agent_team.request_main_pause()
 
     async def submit_resume(self) -> None:
         if self._closed:
             raise RuntimeError("session 已关闭")
 
         logger.info("WebSocketChatSession.submit_resume：收到恢复请求（closed=%s）", self._closed)
-        self._agent_runner.resume()
+        self._agent_team.resume_main()
 
     async def close(self) -> None:
         if self._closed:
@@ -462,7 +468,7 @@ class WebSocketChatSession:
             }
         )
 
-    def _on_agent_runner_error(self, exc: Exception) -> None:
+    def _on_agent_team_error(self, exc: Exception) -> None:
         # AgentRunner 内部已经 logger.exception 过（含 traceback），这里避免重复打印整段堆栈导致日志过长。
         logger.error("WebSocketChatSession agent.run 失败：%s: %s", type(exc).__name__, exc)
         self._emit_sync(
