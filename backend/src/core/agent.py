@@ -11,16 +11,12 @@ from src.conversation_repository import ConversationRepository
 from src.conversation_state import ConversationState
 from src.core.agent_base import AgentBase, DriveDecision, DriveReason
 from src.core.agent_turn import (
+    AgentTurnCallbacks,
+    NOOP_AGENT_TURN_CALLBACKS,
     stream,
     execute_tool_calls,
     TurnResult,
     TurnUsage,
-    OnAiContentDelta,
-    OnAiReasoningDelta,
-    OnAiToolCallStarted,
-    OnAiToolCallArgumentsDelta,
-    OnAiToolCallFinished,
-    OnToolResult,
 )
 from src.tools.tool import Tool
 from src.core.memory_manager import (
@@ -79,12 +75,7 @@ class Agent(AgentBase):
     def __init__(self, *, name: str, model_config: ModelConfig,
                  init_messages: list[dict[str, Any]],
                  tools: list[Tool],
-                 on_ai_content_delta: OnAiContentDelta | None = None,
-                 on_ai_reasoning_delta: OnAiReasoningDelta | None = None,
-                 on_ai_tool_call_started: OnAiToolCallStarted | None = None,
-                 on_ai_tool_call_arguments_delta: OnAiToolCallArgumentsDelta | None = None,
-                 on_ai_tool_call_finished: OnAiToolCallFinished | None = None,
-                 on_tool_result: OnToolResult | None = None,
+                 turn_callbacks: AgentTurnCallbacks | None = None,
                  on_user_msg_enqueued: OnUserMsgEnqueued | None = None,
                  on_queued_user_msg_committed: OnQueuedUserMsgCommitted | None = None,
                  on_switch_conversation: OnSwitchConversation | None = None,
@@ -100,14 +91,7 @@ class Agent(AgentBase):
         self._tools = tools
         if len({tool.name for tool in tools}) != len(tools):
             raise ValueError("tools 里存在重复的 name")
-        self._on_ai_content_delta = on_ai_content_delta or noop
-        self._on_ai_reasoning_delta = on_ai_reasoning_delta or noop
-
-        # started 不一定表示是函数的名字出来了，有些供应商是先给 ID 什么的
-        self._on_ai_tool_call_started = on_ai_tool_call_started or noop
-        self._on_ai_tool_call_arguments_delta = on_ai_tool_call_arguments_delta or noop
-        self._on_ai_tool_call_finished = on_ai_tool_call_finished or noop
-        self._on_tool_result = on_tool_result or noop
+        self._turn_callbacks = turn_callbacks or NOOP_AGENT_TURN_CALLBACKS
 
         self._user_msg_queue: deque[QueuedUserMessage] = deque()
 
@@ -518,6 +502,7 @@ class Agent(AgentBase):
                     last_summarized_signature=previous_last_summarized_signature,
                     conversation_file_name=self._conversation.file_name,
                     awaken_round=summarizer_round,
+                    callbacks=NOOP_AGENT_TURN_CALLBACKS,
                 )
             )
             self._attach_summarizer_task_callbacks(task=summarizer_task)
@@ -542,6 +527,7 @@ class Agent(AgentBase):
                     tools=decider_tools,
                     conversation_file_name=self._conversation.file_name,
                     awaken_round=decider_round,
+                    callbacks=NOOP_AGENT_TURN_CALLBACKS,
                 )
             )
             self._attach_decider_result_handler(task=self._decider_task)
@@ -602,11 +588,11 @@ class Agent(AgentBase):
                         model_config=self._model_config,
                         messages=model_messages,
                         tools=self._tools,
-                        on_ai_content_delta=self._on_ai_content_delta,
-                        on_ai_reasoning_delta=self._on_ai_reasoning_delta,
-                        on_ai_tool_call_started=self._on_ai_tool_call_started,
-                        on_ai_tool_call_arguments_delta=self._on_ai_tool_call_arguments_delta,
-                        on_ai_tool_call_finished=self._on_ai_tool_call_finished,
+                        on_ai_content_delta=self._turn_callbacks.on_ai_content_delta,
+                        on_ai_reasoning_delta=self._turn_callbacks.on_ai_reasoning_delta,
+                        on_ai_tool_call_started=self._turn_callbacks.on_ai_tool_call_started,
+                        on_ai_tool_call_arguments_delta=self._turn_callbacks.on_ai_tool_call_arguments_delta,
+                        on_ai_tool_call_finished=self._turn_callbacks.on_ai_tool_call_finished,
                     )
                     self._append_runtime_message(turn_result.assistant_message)
                     
@@ -626,7 +612,7 @@ class Agent(AgentBase):
 
                 logger.info("Agent[%s].run：收到 tool_calls（n=%s）", self.name, len(ai_msg_dict.get("tool_calls") or []))
                 tool_messages = await execute_tool_calls(ai_msg_dict=ai_msg_dict, tools=self._tools,
-                                                         on_tool_result=self._on_tool_result)
+                                                         on_tool_result=self._turn_callbacks.on_tool_result)
                 for tool_message in tool_messages:
                     self._append_runtime_message(tool_message)
 

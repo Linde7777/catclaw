@@ -6,6 +6,7 @@ from typing import Any, Protocol, cast
 from dataclasses import dataclass
 from litellm import acompletion
 
+from src.commons import noop
 from src.core.model_config import ModelConfig
 from src.tools.tool import Tool, ToolHandler
 
@@ -48,6 +49,35 @@ class OnAiToolCallFinished(Protocol):
             tool_name: str | None,
             arguments: str,
     ) -> None: ...
+
+
+class OnToolResult(Protocol):
+    def __call__(
+        self,
+        *,
+        tool_call_id: str | None,
+        result_json_str: str,
+    ) -> None: ...
+
+
+@dataclass(frozen=True)
+class AgentTurnCallbacks:
+    on_ai_content_delta: OnAiContentDelta
+    on_ai_reasoning_delta: OnAiReasoningDelta
+    on_ai_tool_call_started: OnAiToolCallStarted
+    on_ai_tool_call_arguments_delta: OnAiToolCallArgumentsDelta
+    on_ai_tool_call_finished: OnAiToolCallFinished
+    on_tool_result: OnToolResult
+
+
+NOOP_AGENT_TURN_CALLBACKS = AgentTurnCallbacks(
+    on_ai_content_delta=noop,
+    on_ai_reasoning_delta=noop,
+    on_ai_tool_call_started=noop,
+    on_ai_tool_call_arguments_delta=noop,
+    on_ai_tool_call_finished=noop,
+    on_tool_result=noop,
+)
 
 
 @dataclass(frozen=True)
@@ -494,11 +524,6 @@ async def stream(*, model_config: ModelConfig,
         on_ai_tool_call_arguments_delta=on_ai_tool_call_arguments_delta,
         on_ai_tool_call_finished=on_ai_tool_call_finished,
     )
-
-class OnToolResult(Protocol):
-    def __call__(self, *,
-                 tool_call_id: str | None,
-                 result_json_str: str) -> None: ...
 
 
 def _parse_tool_arguments(*, tool_name: str, arguments: str) -> dict[str, Any]:

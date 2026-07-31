@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, TYPE_CHECKING
+
+from src.core.agent_turn import (
+    AgentTurnCallbacks,
+)
 
 if TYPE_CHECKING:
     from src.core.agent_runner import AgentRunner
     from src.core.memory_manager import DeciderRunner, SummarizerRunner
 
 
-RunnerEventEmitter = Callable[[dict[str, Any]], None]
 ConversationStartMode = Literal["new", "restore_latest"]
 
 
@@ -21,7 +23,7 @@ class WorkerRunnerInput:
     # 根 agent 使用 restore_latest；新 subagent 使用 new，避免恢复其他 agent 的 conversation。
     conversation_start_mode: ConversationStartMode
     can_create_subagents: bool
-    emit_event: RunnerEventEmitter
+    callbacks: AgentTurnCallbacks
 
 
 @dataclass(frozen=True)
@@ -31,7 +33,7 @@ class SummarizerRunnerInput:
     worker_messages: list[dict[str, Any]]
     is_first_time_awaken: bool
     last_summarized_signature: str
-    emit_event: RunnerEventEmitter
+    callbacks: AgentTurnCallbacks
 
 
 @dataclass(frozen=True)
@@ -39,14 +41,14 @@ class DeciderRunnerInput:
     agent_id: str
     name: str
     worker_messages: list[dict[str, Any]]
-    emit_event: RunnerEventEmitter
+    callbacks: AgentTurnCallbacks
 
 
 class AgentRunnerFactory:
     """
     根据 AgentTeam 创建的节点生成对应 runner。
 
-    输入包含节点、初始上下文和统一事件出口。
+    输入包含 agent 身份、初始上下文和统一的模型回调。
     输出是 AgentRunner、SummarizerRunner 或 DeciderRunner。
     """
 

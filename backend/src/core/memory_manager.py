@@ -4,8 +4,11 @@ from src.core.init_prompts import TAG_BIONIC_BOT_INSTRUCTION
 from src.commons import MEMORY_MAIN_MD, MEMORY_TODO_MD, SUMMARIES_DIR
 from src.core.init_prompts import read_main_memory
 
-from src.commons import noop
-from src.core.agent_turn import execute_tool_calls, stream
+from src.core.agent_turn import (
+    AgentTurnCallbacks,
+    execute_tool_calls,
+    stream,
+)
 from src.tools.tool import Tool
 from src.core.memory_manager_run_logger import MemoryManagerRunLogger
 from src.core.model_config import ModelConfig
@@ -14,8 +17,17 @@ RESET_CONTEXT_MAGIC_WORD = "BIONIC-BOT-RESET-CONTEXT"
 
 
 class SummarizerRunner:
-    @staticmethod
+    _visible_messages: list[dict[str, Any]]
+
+    def get_visible_messages(self) -> list[dict[str, Any]]:
+        """
+        返回本次 summarizer 运行中供 UI 展示的消息。
+        完整的 message 包含 fork 之前的 worker 的消息，展示这部分消息就很冗余
+        """
+        raise NotImplementedError
+
     async def run(
+            self,
             *,
             worker_messages: list[dict[str, Any]],
             model_config: ModelConfig,
@@ -24,6 +36,7 @@ class SummarizerRunner:
             last_summarized_signature: str,
             conversation_file_name: str,
             awaken_round: int,
+            callbacks: AgentTurnCallbacks,
     ) -> None:
         forked_messages = [dict(message) for message in worker_messages]
         logger = MemoryManagerRunLogger(
@@ -62,11 +75,11 @@ class SummarizerRunner:
                 tools=tools,
                 # 在medium时，summarizer会有过度工作的问题
                 reasoning_effort="low",
-                on_ai_content_delta=noop,
-                on_ai_reasoning_delta=noop,
-                on_ai_tool_call_started=noop,
-                on_ai_tool_call_arguments_delta=noop,
-                on_ai_tool_call_finished=noop,
+                on_ai_content_delta=callbacks.on_ai_content_delta,
+                on_ai_reasoning_delta=callbacks.on_ai_reasoning_delta,
+                on_ai_tool_call_started=callbacks.on_ai_tool_call_started,
+                on_ai_tool_call_arguments_delta=callbacks.on_ai_tool_call_arguments_delta,
+                on_ai_tool_call_finished=callbacks.on_ai_tool_call_finished,
             )
             assistant_message = turn_result.assistant_message
             forked_messages.append(assistant_message)
@@ -86,7 +99,7 @@ class SummarizerRunner:
             tool_messages = await execute_tool_calls(
                 ai_msg_dict=assistant_message,
                 tools=tools,
-                on_tool_result=noop,
+                on_tool_result=callbacks.on_tool_result,
             )
             forked_messages.extend(tool_messages)
             for tool_message in tool_messages:
@@ -102,14 +115,21 @@ class SummarizerRunner:
 
 
 class DeciderRunner:
-    @staticmethod
+    _visible_messages: list[dict[str, Any]]
+
+    def get_visible_messages(self) -> list[dict[str, Any]]:
+        """返回本次 decider 运行中供 UI 展示的消息。"""
+        raise NotImplementedError
+
     async def run(
+            self,
             *,
             worker_messages: list[dict[str, Any]],
             model_config: ModelConfig,
             tools: list[Tool],
             conversation_file_name: str,
             awaken_round: int,
+            callbacks: AgentTurnCallbacks,
     ) -> bool:
         forked_messages = [dict(message) for message in worker_messages]
         logger = MemoryManagerRunLogger(
@@ -143,11 +163,11 @@ class DeciderRunner:
                 model_config=model_config,
                 messages=forked_messages,
                 tools=tools,
-                on_ai_content_delta=noop,
-                on_ai_reasoning_delta=noop,
-                on_ai_tool_call_started=noop,
-                on_ai_tool_call_arguments_delta=noop,
-                on_ai_tool_call_finished=noop,
+                on_ai_content_delta=callbacks.on_ai_content_delta,
+                on_ai_reasoning_delta=callbacks.on_ai_reasoning_delta,
+                on_ai_tool_call_started=callbacks.on_ai_tool_call_started,
+                on_ai_tool_call_arguments_delta=callbacks.on_ai_tool_call_arguments_delta,
+                on_ai_tool_call_finished=callbacks.on_ai_tool_call_finished,
             )
             assistant_message = turn_result.assistant_message
             forked_messages.append(assistant_message)

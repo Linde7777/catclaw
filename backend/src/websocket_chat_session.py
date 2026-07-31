@@ -9,12 +9,7 @@ from uuid import uuid4
 from src.core.agent import Agent, OnPaused, OnPauseRequested, OnQueuedUserMsgCommitted, OnResumed, OnSwitchConversation
 from src.core.agent_runner import AgentRunner
 from src.core.agent_turn import (
-    OnAiContentDelta,
-    OnAiReasoningDelta,
-    OnAiToolCallArgumentsDelta,
-    OnAiToolCallFinished,
-    OnAiToolCallStarted,
-    OnToolResult,
+    AgentTurnCallbacks,
 )
 from src.core.model_config import (
     ModelConfig,
@@ -46,12 +41,7 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {
 
 @dataclass(frozen=True)
 class AgentCallbacks:
-    on_ai_content_delta: OnAiContentDelta
-    on_ai_reasoning_delta: OnAiReasoningDelta
-    on_ai_tool_call_started: OnAiToolCallStarted
-    on_ai_tool_call_arguments_delta: OnAiToolCallArgumentsDelta
-    on_ai_tool_call_finished: OnAiToolCallFinished
-    on_tool_result: OnToolResult
+    turn_callbacks: AgentTurnCallbacks
     on_queued_user_msg_committed: OnQueuedUserMsgCommitted
     on_switch_conversation: OnSwitchConversation
     on_pause_requested: OnPauseRequested
@@ -98,12 +88,7 @@ def create_default_agent(*, callbacks: AgentCallbacks) -> Agent:
         init_messages=build_init_messages(provider=model_config.provider),
         # bash 和 read_file 共享 cwd，所以这里必须给每个 Agent 创建独立状态，不能复用全局单例。
         tools=build_worker_tools(cwd_state=cwd_state, provider=model_config.provider),
-        on_ai_content_delta=callbacks.on_ai_content_delta,
-        on_ai_reasoning_delta=callbacks.on_ai_reasoning_delta,
-        on_ai_tool_call_started=callbacks.on_ai_tool_call_started,
-        on_ai_tool_call_arguments_delta=callbacks.on_ai_tool_call_arguments_delta,
-        on_ai_tool_call_finished=callbacks.on_ai_tool_call_finished,
-        on_tool_result=callbacks.on_tool_result,
+        turn_callbacks=callbacks.turn_callbacks,
         on_queued_user_msg_committed=callbacks.on_queued_user_msg_committed,
         on_switch_conversation=callbacks.on_switch_conversation,
         on_pause_requested=callbacks.on_pause_requested,
@@ -368,12 +353,14 @@ class WebSocketChatSession:
         self._projector = ChatEventProjector(emit=self._emit_sync)
 
         callbacks = AgentCallbacks(
-            on_ai_content_delta=self._projector.on_ai_content_delta,
-            on_ai_reasoning_delta=self._projector.on_ai_reasoning_delta,
-            on_ai_tool_call_started=self._projector.on_ai_tool_call_started,
-            on_ai_tool_call_arguments_delta=self._projector.on_ai_tool_call_arguments_delta,
-            on_ai_tool_call_finished=self._projector.on_ai_tool_call_finished,
-            on_tool_result=self._projector.on_tool_result,
+            turn_callbacks=AgentTurnCallbacks(
+                on_ai_content_delta=self._projector.on_ai_content_delta,
+                on_ai_reasoning_delta=self._projector.on_ai_reasoning_delta,
+                on_ai_tool_call_started=self._projector.on_ai_tool_call_started,
+                on_ai_tool_call_arguments_delta=self._projector.on_ai_tool_call_arguments_delta,
+                on_ai_tool_call_finished=self._projector.on_ai_tool_call_finished,
+                on_tool_result=self._projector.on_tool_result,
+            ),
             on_queued_user_msg_committed=self._on_queued_user_msg_committed,
             on_switch_conversation=self._on_switch_conversation,
             on_pause_requested=self._projector.on_pause_requested,
