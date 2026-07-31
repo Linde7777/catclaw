@@ -8,14 +8,15 @@
 
 ## 核心结构
 
-`AgentCoordinator` 管理 agent 注册表、父子关系、名字检查、消息路由、运行状态和事件订阅。
+`AgentCoordinator` 管理 agent 树、名字检查、消息路由、运行状态和事件订阅。
 `WebSocketChatSession` 只转发命令并订阅事件，不拥有 agent 的业务生命周期。
 worker 和 subagent 使用 `Agent + AgentRunner`。
-summarizer 和 decider 保留一次性运行循环，不支持暂停、steer 或接收 agent 消息。
-每次 memory manager 唤醒都是独立的 agent 实例。
+summarizer 和 decider 的每次唤醒都是独立的一次性运行，不支持暂停、steer 或接收 agent 消息。
 
-每个实例包含 `agent_id`、`name`、`kind`、`parent_agent_id` 和 `status`。
+每个实例包含 `agent_id`、`name`、`role`、`parent_agent_id` 和 `status`。
 `agent_id` 是持久化与事件标识，`name` 是显示名称和消息路由名称。
+`role` 表示 `worker`、`summarizer` 或 `decider`，不表示 main 或 subagent。
+`parent_agent_id` 为空的 worker 是根 agent，其余 agent 都通过父节点形成任意深度的树。
 可接收消息的 agent 名字在当前 coordinator 内唯一。
 
 ## 消息与工具
@@ -37,7 +38,7 @@ memory manager 记录 fork 后收到的任务和执行过程，不复制 worker 
 统一记录替代 `MemoryManagerRunLogger` 后，删除该类及旧 JSONL 写入逻辑。
 
 前端保存 `agent_id -> timeline`，主区域继续显示 worker。
-右侧面板显示 agent 列表、类型、父级和状态。
+右侧面板按父子关系显示 agent 树、角色和状态。
 用户选择一个 agent 后，面板复用现有消息与工具组件展示其时间线。
 
 ## 实施顺序与暂不实现
