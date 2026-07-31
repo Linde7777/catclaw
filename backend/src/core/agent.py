@@ -9,7 +9,7 @@ from math import ceil
 from src.commons import get_model_context_window_tokens, noop
 from src.conversation_repository import ConversationRepository
 from src.conversation_state import ConversationState
-from src.core.agent_base import AgentBase, DriveDecision, DriveReason
+from src.core.agent_base import AgentBase, ConversationStartStrategy, DriveDecision, DriveReason
 from src.core.agent_turn import (
     AgentTurnCallbacks,
     NOOP_AGENT_TURN_CALLBACKS,
@@ -21,6 +21,7 @@ from src.core.agent_turn import (
 from src.tools.tool import Tool
 from src.core.memory_manager import (
     DeciderRunner,
+    MemoryManagerRunSnapshot,
     SummarizerRunner,
 )
 from src.core.model_config import ModelConfig
@@ -71,10 +72,17 @@ class OnResumed(Protocol):
 
 
 class Agent(AgentBase):
+    # 根 Agent 使用 restore_latest，新建 subagent 使用 create_new。
+    _conversation_start_strategy: ConversationStartStrategy
+    # 每个 Agent 使用独立作用域，防止 load_latest() 读到其他 Agent 的 conversation。
+    _conversation_repository: ConversationRepository
+    # 每次唤醒都会创建新的 runner。这个注册表只属于当前 Agent，不进入 AgentTree。
+    _memory_manager_runners_by_id: dict[str, SummarizerRunner | DeciderRunner]
 
     def __init__(self, *, name: str, model_config: ModelConfig,
                  init_messages: list[dict[str, Any]],
                  tools: list[Tool],
+                 conversation_start_strategy: ConversationStartStrategy,
                  turn_callbacks: AgentTurnCallbacks | None = None,
                  on_user_msg_enqueued: OnUserMsgEnqueued | None = None,
                  on_queued_user_msg_committed: OnQueuedUserMsgCommitted | None = None,
@@ -85,6 +93,7 @@ class Agent(AgentBase):
                  conversation_repository: ConversationRepository | None = None,
                  ) -> None:
         self.name = name
+        self._conversation_start_strategy = conversation_start_strategy
         self._model_config = model_config
         self._conversation = ConversationState(init_messages=[message.copy() for message in init_messages])
         self._conversation_repository = conversation_repository or ConversationRepository()
@@ -171,6 +180,10 @@ class Agent(AgentBase):
 
     def get_visible_messages(self) -> list[dict[str, Any]]:
         """返回当前 conversation 中供 UI 展示的消息副本。"""
+        raise NotImplementedError
+
+    def get_memory_manager_run_snapshots(self) -> tuple[MemoryManagerRunSnapshot, ...]:
+        """返回当前 conversation 内按创建顺序排列的 memory manager 运行记录。"""
         raise NotImplementedError
 
     def _enqueue_message(self, *, queued_message: QueuedMessage) -> None:

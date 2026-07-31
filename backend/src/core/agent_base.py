@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.core.memory_manager import MemoryManagerRunSnapshot
 
 
 class DriveReason(StrEnum):
@@ -12,6 +15,10 @@ class DriveReason(StrEnum):
     no_backlog = "no_backlog"
     paused_no_backlog = "paused_no_backlog"
     paused_with_backlog = "paused_with_backlog"
+
+
+# 根 Agent 使用 restore_latest。新建 subagent 使用 create_new，避免串用 conversation。
+ConversationStartStrategy = Literal["create_new", "restore_latest"]
 
 
 @dataclass(frozen=True)
@@ -37,6 +44,11 @@ class AgentBase(ABC):
     @abstractmethod
     def get_visible_messages(self) -> list[dict[str, Any]]:
         """返回当前 conversation 中供 UI 展示的消息。"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_memory_manager_run_snapshots(self) -> tuple["MemoryManagerRunSnapshot", ...]:
+        """返回当前 conversation 内的 memory manager 运行记录。"""
         raise NotImplementedError
 
     @abstractmethod

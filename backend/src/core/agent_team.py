@@ -6,13 +6,8 @@ from enum import StrEnum
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.core.agent_runner_factory import AgentRunnerFactory
-
-
-class AgentRole(StrEnum):
-    worker = "worker"
-    summarizer = "summarizer"
-    decider = "decider"
+    from src.core.agent_runner import AgentRunner
+    from src.core.memory_manager import MemoryManagerRunSnapshot
 
 
 class AgentStatus(StrEnum):
@@ -26,7 +21,6 @@ class AgentStatus(StrEnum):
 class AgentNode:
     agent_id: str
     name: str
-    role: AgentRole
     parent_agent_id: str | None
     status: AgentStatus
     supports_steer: bool
@@ -37,6 +31,8 @@ class AgentNode:
 @dataclass(frozen=True)
 class AgentTeamEvent:
     agent_id: str
+    # None 表示 Agent 本身的事件。非 None 表示该 Agent 内部一次 memory manager 运行的事件。
+    memory_manager_run_id: str | None
     payload: dict[str, Any]
 
 
@@ -59,35 +55,30 @@ Unsubscribe = Callable[[], None]
 
 class AgentTeam:
     """
-    管理一棵可运行的 agent 树，并向展示层提供统一事件。
+    管理一棵可交互的 agent 树，并向展示层提供统一事件。
 
-    下层 agent 接收用户消息、agent 消息和生命周期命令。
-    下层 agent 输出模型事件、工具事件、消息提交事件和状态变化。
-    AgentTeam 不要求所有 agent 支持相同输入能力。
+    树中的节点只表示 Agent，不包含 Agent 内部的 memory_manager。
+    每个 Agent 自己创建 memory manager，并把相关事件作为自身工作过程输出。
     """
 
     _root_agent_id: str
     _nodes_by_id: dict[str, AgentNode]
     _agent_ids_by_name: dict[str, str]
-    # AgentRunner、SummarizerRunner、DeciderRunner
-    _agent_runners_by_id: dict[str, object]
-    _memory_manager_counts_by_role: dict[AgentRole, int]
+    _agent_runners_by_id: dict[str, AgentRunner]
     _subscribers: list[AgentTeamEventSubscriber]
-    _agent_runner_factory: AgentRunnerFactory
     _allow_nested_subagents: bool
 
     def __init__(
         self,
         *,
         root_agent_name: str,
-        agent_runner_factory: AgentRunnerFactory,
         allow_nested_subagents: bool = False,
     ) -> None:
         """保存团队依赖，并创建尚未启动的根节点。"""
         raise NotImplementedError
 
     def start(self) -> AgentTreeSnapshot:
-        """启动或恢复根 agent，并返回当前团队树。"""
+        """启动根 Agent，恢复它最近的 conversation，并返回当前 AgentTree。"""
         raise NotImplementedError
 
     def snapshot(self) -> AgentTreeSnapshot:
@@ -96,6 +87,14 @@ class AgentTeam:
 
     def get_visible_messages(self, *, agent_id: str) -> list[dict[str, Any]]:
         """找到指定 agent 的 runner，并向它读取可见消息。"""
+        raise NotImplementedError
+
+    def get_memory_manager_run_snapshots(
+        self,
+        *,
+        agent_id: str,
+    ) -> tuple[MemoryManagerRunSnapshot, ...]:
+        """找到指定 Agent，并读取它内部的 memory manager 运行记录。"""
         raise NotImplementedError
 
     def submit_user_message(
@@ -115,7 +114,11 @@ class AgentTeam:
         name: str,
         first_message: str,
     ) -> AgentNode:
-        """检查父节点权限、保留名称和全局重名，然后创建并启动子 worker。"""
+        """
+        创建并启动具有独立 conversation 的 subagent。
+
+        新建 subagent 必须创建新的 conversation，不能恢复任何其他 Agent 的记录。
+        """
         raise NotImplementedError
 
     def send_message(
@@ -126,16 +129,6 @@ class AgentTeam:
         content: str,
     ) -> None:
         """定位目标 agent，包装来源信息，然后提交 agent 消息。"""
-        raise NotImplementedError
-
-    def start_memory_manager(
-        self,
-        *,
-        parent_agent_id: str,
-        role: AgentRole,
-        request: object,
-    ) -> AgentNode:
-        """按当前 conversation 的角色序号命名 memory manager，并把结果返回父 agent。"""
         raise NotImplementedError
 
     def request_pause(self, *, agent_id: str) -> None:

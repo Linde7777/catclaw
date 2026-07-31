@@ -1,10 +1,13 @@
 import asyncio
 from collections.abc import Callable
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from src.commons import noop
 from src.core.agent_base import AgentBase
+
+if TYPE_CHECKING:
+    from src.core.memory_manager import MemoryManagerRunSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +76,10 @@ class AgentRunner:
 
     def get_visible_messages(self) -> list[dict[str, Any]]:
         """向 Agent 读取当前 conversation 中供 UI 展示的消息。"""
+        raise NotImplementedError
+
+    def get_memory_manager_run_snapshots(self) -> tuple["MemoryManagerRunSnapshot", ...]:
+        """向 Agent 读取当前 conversation 内的 memory manager 运行记录。"""
         raise NotImplementedError
 
     def request_pause(self) -> None:

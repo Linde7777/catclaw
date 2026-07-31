@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from src.core.init_prompts import TAG_BIONIC_BOT_INSTRUCTION
@@ -16,8 +18,43 @@ from src.core.model_config import ModelConfig
 RESET_CONTEXT_MAGIC_WORD = "BIONIC-BOT-RESET-CONTEXT"
 
 
+class MemoryManagerKind(StrEnum):
+    summarizer = "summarizer"
+    decider = "decider"
+
+
+class MemoryManagerRunStatus(StrEnum):
+    running = "running"
+    finished = "finished"
+    failed = "failed"
+    cancelled = "cancelled"
+
+
+@dataclass(frozen=True)
+class MemoryManagerRunSnapshot:
+    """
+    表示某个 Agent 内部的一次 memory manager 运行，供 UI 展示。
+
+    name 使用 summarizer-N 或 decider-N，N 在所属 Agent reset context 后重新计数。
+    visible_messages 只包含 fork 后新增的消息，不重复所属 Agent 的既有消息。
+    """
+
+    run_id: str
+    name: str
+    kind: MemoryManagerKind
+    status: MemoryManagerRunStatus
+    visible_messages: tuple[dict[str, Any], ...]
+
+
 class SummarizerRunner:
+    run_id: str
+    name: str
+    status: MemoryManagerRunStatus
     _visible_messages: list[dict[str, Any]]
+
+    def snapshot(self) -> MemoryManagerRunSnapshot:
+        """返回本次 summarizer 运行的身份、状态和可见消息。"""
+        raise NotImplementedError
 
     def get_visible_messages(self) -> list[dict[str, Any]]:
         """
@@ -115,7 +152,14 @@ class SummarizerRunner:
 
 
 class DeciderRunner:
+    run_id: str
+    name: str
+    status: MemoryManagerRunStatus
     _visible_messages: list[dict[str, Any]]
+
+    def snapshot(self) -> MemoryManagerRunSnapshot:
+        """返回本次 decider 运行的身份、状态和可见消息。"""
+        raise NotImplementedError
 
     def get_visible_messages(self) -> list[dict[str, Any]]:
         """返回本次 decider 运行中供 UI 展示的消息。"""
