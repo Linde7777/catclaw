@@ -30,6 +30,16 @@ class AgentBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def enqueue_agent_message(self, *, sender_name: str, content: str) -> None:
+        """接收另一个 agent 发来的消息。"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_visible_messages(self) -> list[dict[str, Any]]:
+        """返回当前 conversation 中供 UI 展示的消息。"""
+        raise NotImplementedError
+
+    @abstractmethod
     def request_pause(self) -> None:
         raise NotImplementedError
 

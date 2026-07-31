@@ -41,6 +41,15 @@ class QueuedUserMessage:
     content: str
 
 
+@dataclass(frozen=True)
+class QueuedAgentMessage:
+    sender_name: str
+    content: str
+
+
+QueuedMessage = QueuedUserMessage | QueuedAgentMessage
+
+
 class OnUserMsgEnqueued(Protocol):
     def __call__(self, *, frontend_msg_id: str) -> None: ...
 
@@ -171,6 +180,18 @@ class Agent(AgentBase):
             len(user_message),
         )
         self._on_user_msg_enqueued(frontend_msg_id=frontend_msg_id)
+
+    def enqueue_agent_message(self, *, sender_name: str, content: str) -> None:
+        """包装消息来源，然后通过统一入口把 agent 消息加入队列。"""
+        raise NotImplementedError
+
+    def get_visible_messages(self) -> list[dict[str, Any]]:
+        """返回当前 conversation 中供 UI 展示的消息副本。"""
+        raise NotImplementedError
+
+    def _enqueue_message(self, *, queued_message: QueuedMessage) -> None:
+        """统一处理自动恢复、消息入队和对应的入队回调。"""
+        raise NotImplementedError
 
     def request_pause(self) -> None:
         if self._conversation.paused:

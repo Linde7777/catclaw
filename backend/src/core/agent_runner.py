@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Callable
 import logging
+from typing import Any
 
 from src.commons import noop
 from src.core.agent_base import AgentBase
@@ -65,6 +66,14 @@ class AgentRunner:
             user_message=user_message,
         )
         self._ensure_running()
+
+    def submit_agent_message(self, *, sender_name: str, content: str) -> None:
+        """把另一个 agent 发来的消息交给 Agent，并保证后台任务开始运行。"""
+        raise NotImplementedError
+
+    def get_visible_messages(self) -> list[dict[str, Any]]:
+        """向 Agent 读取当前 conversation 中供 UI 展示的消息。"""
+        raise NotImplementedError
 
     def request_pause(self) -> None:
         logger.info("AgentRunner.request_pause：收到暂停请求（agent=%s）", getattr(self._agent, "name", "<unknown>"))

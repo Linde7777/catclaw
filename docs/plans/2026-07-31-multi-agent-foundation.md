@@ -8,16 +8,16 @@
 
 ## 核心结构
 
-`AgentCoordinator` 管理 agent 树、名字检查、消息路由、运行状态和事件订阅。
+`AgentTeam` 管理 agent 树、名字检查、消息路由、运行状态和事件订阅。
 `WebSocketChatSession` 只转发命令并订阅事件，不拥有 agent 的业务生命周期。
 worker 和 subagent 使用 `Agent + AgentRunner`。
 summarizer 和 decider 的每次唤醒都是独立的一次性运行，不支持暂停、steer 或接收 agent 消息。
 
 每个实例包含 `agent_id`、`name`、`role`、`parent_agent_id` 和 `status`。
-`agent_id` 是持久化与事件标识，`name` 是显示名称和消息路由名称。
+`agent_id` 是持久化与事件标识，`name` 是当前 conversation 内唯一的显示和路由名称。
 `role` 表示 `worker`、`summarizer` 或 `decider`，不表示 main 或 subagent。
 `parent_agent_id` 为空的 worker 是根 agent，其余 agent 都通过父节点形成任意深度的树。
-可接收消息的 agent 名字在当前 coordinator 内唯一。
+memory manager 使用 `summarizer-<序号>` 和 `decider-<序号>` 保留名称，reset context 后从 1 重新计数。
 
 ## 消息与工具
 
@@ -43,8 +43,8 @@ memory manager 记录 fork 后收到的任务和执行过程，不复制 worker 
 
 ## 实施顺序与暂不实现
 
-先建立 coordinator、统一事件和独立记录的骨架。
+先建立 AgentTeam、统一事件和独立记录的骨架。
 再接入 memory manager，并删除旧 logger。
 然后实现右侧面板、subagent 工具和跨 agent 消息。
 本次不实现 WebSocket 断开后继续运行。
-未来把 coordinator 放到应用生命周期中，断线只取消订阅，agent 继续运行并持久化。
+未来把 AgentTeam 放到应用生命周期中，断线只取消订阅，agent 继续运行并持久化。
