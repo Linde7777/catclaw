@@ -106,7 +106,7 @@ const errorEventSchema = z.object({
   message: nonEmptyString,
 })
 
-export const serverEventSchema = z.discriminatedUnion('type', [
+export const agentPayloadEventSchema = z.discriminatedUnion('type', [
   agentBecameBusyEventSchema,
   agentBecameIdleEventSchema,
   agentPauseRequestedEventSchema,
@@ -124,8 +124,55 @@ export const serverEventSchema = z.discriminatedUnion('type', [
   errorEventSchema,
 ])
 
+const agentNodeSchema = z.object({
+  agentId: nonEmptyString,
+  name: nonEmptyString,
+  parentAgentId: nonEmptyString.nullable(),
+  status: z.enum(['idle', 'busy', 'finished', 'failed']),
+  supportsSteer: z.boolean(),
+  supportsPause: z.boolean(),
+  canCreateSubagents: z.boolean(),
+})
+
+const memoryManagerRunSchema = z.object({
+  runId: nonEmptyString,
+  name: nonEmptyString,
+  kind: z.enum(['summarizer', 'decider']),
+  status: z.enum(['running', 'finished', 'failed', 'cancelled']),
+  visibleMessages: z.array(visibleConversationMessageSchema),
+})
+
+const agentTreeSnapshotEventSchema = z.object({
+  type: z.literal('agent.tree.snapshot'),
+  rootAgentId: nonEmptyString,
+  agents: z.array(agentNodeSchema),
+})
+
+const agentViewSnapshotEventSchema = z.object({
+  type: z.literal('agent.view.snapshot'),
+  agentId: nonEmptyString,
+  visibleMessages: z.array(visibleConversationMessageSchema),
+  memoryManagerRuns: z.array(memoryManagerRunSchema),
+})
+
+const agentEventSchema = z.object({
+  type: z.literal('agent.event'),
+  agentId: nonEmptyString,
+  memoryManagerRunId: nonEmptyString.nullable(),
+  payload: agentPayloadEventSchema,
+})
+
+// 裸事件只用于当前单 Agent 后端。AgentTree 适配完成后可以删除这个兼容分支。
+export const serverEventSchema = z.union([
+  agentTreeSnapshotEventSchema,
+  agentViewSnapshotEventSchema,
+  agentEventSchema,
+  agentPayloadEventSchema,
+])
+
 const sendUserMessageCommandSchema = z.object({
   type: z.literal('send_user_message'),
+  agentId: nonEmptyString,
   userMessageId: nonEmptyString,
   content: z.string().trim().min(1),
 })
@@ -136,10 +183,17 @@ const pingCommandSchema = z.object({
 
 const requestPauseCommandSchema = z.object({
   type: z.literal('request_pause'),
+  agentId: nonEmptyString,
 })
 
 const resumeCommandSchema = z.object({
   type: z.literal('resume'),
+  agentId: nonEmptyString,
+})
+
+const requestAgentViewCommandSchema = z.object({
+  type: z.literal('request_agent_view'),
+  agentId: nonEmptyString,
 })
 
 export const clientCommandSchema = z.discriminatedUnion('type', [
@@ -147,15 +201,15 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   pingCommandSchema,
   requestPauseCommandSchema,
   resumeCommandSchema,
+  requestAgentViewCommandSchema,
 ])
 
+export type AgentPayloadEvent = z.infer<typeof agentPayloadEventSchema>
+export type AgentNode = z.infer<typeof agentNodeSchema>
+export type MemoryManagerRun = z.infer<typeof memoryManagerRunSchema>
 export type ServerEvent = z.infer<typeof serverEventSchema>
 export type ClientCommand = z.infer<typeof clientCommandSchema>
 export type VisibleConversationMessage = z.infer<typeof visibleConversationMessageSchema>
-
-export function parseServerEvent(payload: unknown): ServerEvent {
-  return serverEventSchema.parse(payload)
-}
 
 export function safeParseServerEvent(payload: unknown) {
   return serverEventSchema.safeParse(payload)
@@ -163,8 +217,4 @@ export function safeParseServerEvent(payload: unknown) {
 
 export function parseClientCommand(payload: unknown): ClientCommand {
   return clientCommandSchema.parse(payload)
-}
-
-export function safeParseClientCommand(payload: unknown) {
-  return clientCommandSchema.safeParse(payload)
 }

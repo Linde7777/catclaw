@@ -1,5 +1,5 @@
 import { parseClientCommand, safeParseServerEvent } from './protocol'
-import { useChatStore } from './store'
+import { LEGACY_ROOT_AGENT_ID, useChatStore } from './store'
 
 type ChatClientOptions = {
   url?: string
@@ -111,6 +111,12 @@ export class ChatClient {
       }
 
       useChatStore.getState().applyServerEvent(parsed.data)
+      if (parsed.data.type === 'agent.tree.snapshot') {
+        const selectedAgentId = useChatStore.getState().selectedAgentId
+        if (selectedAgentId) {
+          this.requestAgentView(selectedAgentId)
+        }
+      }
     })
 
     socket.addEventListener('error', () => {
@@ -162,7 +168,7 @@ export class ChatClient {
     useChatStore.getState().setConnectionStatus('closed')
   }
 
-  sendUserMessage(content: string) {
+  sendUserMessage(agentId: string, content: string) {
     const trimmedContent = content.trim()
     if (!trimmedContent) {
       return null
@@ -176,11 +182,13 @@ export class ChatClient {
     const userMessageId = crypto.randomUUID()
     const command = parseClientCommand({
       type: 'send_user_message',
+      agentId,
       userMessageId,
       content: trimmedContent,
     })
 
     useChatStore.getState().stageUserMessage({
+      agentId,
       userMessageId,
       content: trimmedContent,
     })
@@ -197,20 +205,31 @@ export class ChatClient {
     socket.send(JSON.stringify(parseClientCommand({ type: 'ping' })))
   }
 
-  requestPause() {
+  requestAgentView(agentId: string) {
+    if (agentId === LEGACY_ROOT_AGENT_ID) {
+      return
+    }
     const socket = this.socket
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return
     }
-    socket.send(JSON.stringify(parseClientCommand({ type: 'request_pause' })))
+    socket.send(JSON.stringify(parseClientCommand({ type: 'request_agent_view', agentId })))
   }
 
-  resume() {
+  requestPause(agentId: string) {
     const socket = this.socket
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return
     }
-    socket.send(JSON.stringify(parseClientCommand({ type: 'resume' })))
+    socket.send(JSON.stringify(parseClientCommand({ type: 'request_pause', agentId })))
+  }
+
+  resume(agentId: string) {
+    const socket = this.socket
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      return
+    }
+    socket.send(JSON.stringify(parseClientCommand({ type: 'resume', agentId })))
   }
 }
 
